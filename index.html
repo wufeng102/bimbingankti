@@ -284,6 +284,27 @@ hr.s{border:0;border-top:1px solid var(--line);margin:16px 0}
 .mn{display:flex;gap:8px;align-items:flex-start;background:var(--fill);border-radius:12px;padding:8px 10px;margin-top:6px;font-size:.9rem}
 .mn .tx{flex:1;min-width:0;overflow-wrap:anywhere;white-space:pre-wrap}
 .mn button{background:none;border:0;color:var(--red);cursor:pointer;padding:2px 6px;font-size:1rem}
+.vw .rdoc{flex:1;overflow:auto;background:#cfd6e2;padding:12px 8px;min-width:0;-webkit-overflow-scrolling:touch}
+.rdoc .pgw{margin:0 auto 12px;background:#fff;box-shadow:0 2px 12px rgba(0,0,0,.2)}
+.rdoc .pgw canvas{display:block;width:100%;height:100%}
+.rdoc .docx-wrapper{background:transparent!important;padding:0!important}
+.rdoc .docx-wrapper>section.docx{margin:0 auto 12px!important;box-shadow:0 2px 12px rgba(0,0,0,.2)}
+.md{position:fixed;inset:0;z-index:45;background:rgba(7,16,31,.5);display:flex;align-items:flex-start;justify-content:center;overflow:auto;padding:24px 14px}
+.md[hidden]{display:none}
+.md .card{width:100%;max-width:560px;margin:auto}
+.bdg{display:inline-grid;place-items:center;min-width:18px;height:18px;padding:0 5px;margin-left:6px;border-radius:9px;background:var(--amber);color:#fff;font-size:.7rem;font-weight:700;font-style:normal;vertical-align:middle}
+button.guide{width:100%;font:inherit;text-align:left;cursor:pointer}
+.chk{display:flex;gap:10px;align-items:flex-start;color:var(--text)!important;font-weight:400!important}
+.chk input{margin-top:4px;width:18px;height:18px;flex:none}
+.bk .ab{font-size:.84rem;color:var(--muted);line-height:1.45;display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden}
+.bk .acts{display:flex;flex-wrap:wrap;gap:6px;align-items:center}
+.bk .tg{display:flex;gap:6px;flex-wrap:wrap}
+.pend{margin-top:18px;border:1px solid var(--gold);background:var(--gold-l);border-radius:16px;padding:14px 16px}
+.pend h3{margin:0 0 8px}
+.pi{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:12px 14px;margin-top:8px}
+.pi b{display:block;overflow-wrap:anywhere}.pi small{color:var(--muted)}
+.pi .acts{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px}
+.cols{display:flex;gap:10px;flex-wrap:wrap;align-items:center;justify-content:space-between;margin-top:16px}
 @media(max-width:760px){.vw .vb{flex-direction:column}.vw .vside{width:auto;max-width:none;max-height:42%;border-left:0;border-top:1px solid var(--line)}}
 @media(prefers-reduced-motion:reduce){*{animation:none!important;transition:opacity .2s!important}.btn:active,.bk:hover{transform:none}}
 @media(prefers-reduced-transparency:reduce){header.top,.tabbar{background:var(--card);backdrop-filter:none}.busy{backdrop-filter:none}}
@@ -294,6 +315,7 @@ hr.s{border:0;border-top:1px solid var(--line);margin:16px 0}
 <div id="app"></div>
 <div id="toast" class="toast" role="status" aria-live="polite"></div>
 <div id="viewer" class="vw" hidden role="dialog" aria-modal="true" aria-label="Penampil naskah"></div>
+<div id="modal" class="md" hidden role="dialog" aria-modal="true"></div>
 <div id="busy" class="busy" hidden><div><div class="spin"></div><span id="busyMsg">Memproses…</span></div></div>
 
 <script>
@@ -316,7 +338,7 @@ var store = {
 };
 
 var S = { view: 'boot', tab: 'login', auth: null, me: null, list: null, detail: null, lib: null, cap: null,
-          open: {}, flt: 'all', q: '', libq: '', pendingEmail: '', lf: { j: 'all', k: 'all', s: 'new' }, _pv: '' };
+          open: {}, flt: 'all', q: '', libq: '', pendingEmail: '', lf: { j: 'all', k: 'all', c: 'all', s: 'new' }, lc: null, libAll: null, _pv: '' };
 
 var IC = {
   check: '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="11" fill="currentColor"/><path d="M7 12.5l3.2 3.2L17 9" fill="none" stroke="#fff" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg>',
@@ -399,14 +421,14 @@ async function api(action, data, anon) {
   if (!j.ok) { var e = new Error(j.error || 'Gagal.'); e.code = j.code; throw e; }
   return j.data;
 }
-function clearAuth() { S.auth = null; S.me = null; S.list = null; S.detail = null; S.lib = null; store.del('bka_rt'); }
+function clearAuth() { S.auth = null; S.me = null; S.list = null; S.detail = null; S.lib = null; S.libAll = null; S.lc = null; FC = { id: null, d: null }; store.del('bka_rt'); }
 function logout(msg) { clearAuth(); S.view = 'auth'; S.tab = 'login'; render(); if (msg) toast(msg); }
 
 async function loadMe() {
   try {
     var d = await api('me');
     S.me = d;
-    if (d.role === 'admin') { S.view = 'adminList'; await loadList(); } else S.view = 'student';
+    if (d.role === 'admin') { S.view = 'adminList'; await loadList(); try { S.libAll = await api('adminLibList'); } catch (e2) {} } else S.view = 'student';
   } catch (e) {
     if (e.code === 'UNVERIFIED') S.view = 'unverified';
     else if (e.code === 'CLOSED') { clearAuth(); S.view = 'closed'; }
@@ -469,7 +491,7 @@ function nav(v, label) {
 function header() {
   var adm = S.me && S.me.role === 'admin', stu = S.me && S.me.role === 'student', items = '', chip = '';
   if (stu) items = nav('student', 'Dashboard') + nav('lib', 'Perpustakaan');
-  if (adm) items = nav('adminList', 'Mahasiswa') + nav('lib', 'Perpustakaan');
+  if (adm) items = nav('adminList', 'Mahasiswa') + nav('lib', 'Perpustakaan' + (pendCount() ? '<i class="bdg">' + pendCount() + '</i>' : ''));
   if (S.me) { var nm = stu ? S.me.profile.nama : S.me.config.adminName; chip = '<div class="uchip">' + avatar(nm) + '<span>' + esc(stu ? nm.split(' ')[0] : 'Dosen pembimbing') + '</span></div>'; }
   return '<header class="top"><div class="in"><div class="brand"><span class="lg">' + ICO.cap + '</span><span class="bt"><b>Bimbingan karya ilmiah</b><small>' +
     (S.me ? 'Pembimbing: ' + esc(S.me.config.adminName) : 'Universitas Muhammadiyah Bengkulu') + '</small></span></div>' +
@@ -480,7 +502,7 @@ function tabbar() {
   var stu = S.me.role === 'student', it = stu ? [['student', 'Dashboard', ICO.home], ['lib', 'Perpustakaan', ICO.lib]] : [['adminList', 'Mahasiswa', ICO.users], ['lib', 'Perpustakaan', ICO.lib]];
   return '<nav class="tabbar">' + it.map(function (x) {
     var on = S.view === x[0] || (x[0] === 'adminList' && S.view === 'adminDetail');
-    return '<button class="' + (on ? 'on' : '') + '" data-act="go" data-v="' + x[0] + '">' + x[2] + '<span>' + x[1] + '</span></button>';
+    return '<button class="' + (on ? 'on' : '') + '" data-act="go" data-v="' + x[0] + '">' + x[2] + '<span>' + x[1] + (x[0] === 'lib' && S.me.role === 'admin' && pendCount() ? '<i class="bdg">' + pendCount() + '</i>' : '') + '</span></button>';
   }).join('') + '<button data-act="logout">' + ICO.out + '<span>Keluar</span></button></nav>';
 }
 function render() {
@@ -495,10 +517,12 @@ function render() {
   else if (v === 'closed') h = msgView('🎓', 'Akses telah ditutup', 'Seluruh tahapan bimbingan karya ilmiah untuk akun ini telah selesai. Terima kasih dan semoga ilmunya bermanfaat.', '<button class="btn" data-act="toLogin">Kembali</button>');
   else if (v === 'student') h = studentView();
   else if (v === 'lib') h = libView();
+  else if (v === 'deposit') h = depositView();
+  else if (v === 'depDone') h = msgView('✉️', 'Cek email Anda', 'Kami mengirim tautan konfirmasi ke <b>' + esc(S.pendingEmail) + '</b>. Setelah email dikonfirmasi, dosen pembimbing memeriksa karya Anda sebelum terbit di perpustakaan. Periksa juga folder spam.', '<button class="btn primary" data-act="toLogin">Selesai</button>');
   else if (v === 'adminList') h = adminListView();
   else if (v === 'adminDetail') h = adminDetailView();
   $('#app').innerHTML = header() + '<main class="wrap">' + h + '</main>' + tabbar();
-  if (v === 'auth' && S.tab === 'register') loadCaptcha();
+  if ((v === 'auth' && S.tab === 'register') || v === 'deposit') loadCaptcha();
 }
 function msgView(icon, t, p, btns) {
   return '<div class="card mk" style="margin-top:40px"><div class="big">' + icon + '</div><h2 style="margin:8px 0">' + t + '</h2><p class="muted" style="max-width:420px">' + p + '</p><div class="row" style="justify-content:center;margin-top:10px">' + btns + '</div></div>';
@@ -540,7 +564,9 @@ function authView() {
   var guide = '<a class="guide" href="' + CONFIG.GUIDE_URL + '" download="Buku-Panduan-E-Theses-System.pdf" rel="noopener">' +
     '<span class="gi"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 5a2 2 0 0 1 2-2h12v16H6a2 2 0 0 0-2 2z"/><path d="M4 21V5"/><path d="M12 7v6m0 0-2.5-2.5M12 13l2.5-2.5"/></svg></span>' +
     '<span><b>Buku panduan penggunaan</b><small>Langkah demi langkah, format PDF</small></span><span class="gd">Unduh</span></a>';
-  return '<div class="auth">' + side + '<div class="af">' + guide + form + '</div></div>';
+  var dep = '<button type="button" class="guide" data-act="toDeposit"><span class="gi"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 16V4m0 0-4 4m4-4 4 4"/><path d="M4 15v3a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-3"/></svg></span>' +
+    '<span><b>Alumni? Titipkan karya Anda</b><small>Deposit skripsi, tesis, atau artikel ke perpustakaan</small></span><span class="gd">Kirim</span></button>';
+  return '<div class="auth">' + side + '<div class="af">' + guide + dep + form + '</div></div>';
 }
 
 function strip(items) {
@@ -584,28 +610,236 @@ function studentView() {
 
 /* ---------- Perpustakaan ---------- */
 var SPINE = { Skripsi: 'var(--accent)', Tesis: 'var(--violet)', Artikel: 'var(--teal)' };
+/* ---------- Perpustakaan: dua koleksi, pembaca, deposit ---------- */
+var BOOK_CATS = ['Metodologi Penelitian', 'Statistika', 'Penulisan Ilmiah', 'Kesehatan Masyarakat', 'Gizi', 'Kebidanan', 'Keperawatan', 'Manajemen dan Ekonomi', 'Pendidikan', 'Hukum', 'Lainnya'];
+function isAdm() { return !!(S.me && S.me.role === 'admin'); }
+function pendCount() { return (S.libAll || []).filter(function (l) { return l.status === 'pending'; }).length; }
+function safeUrl(u) { return /^https?:\/\//i.test(u || '') ? u : ''; }
+async function reloadLib() {
+  if (isAdm()) { S.libAll = await api('adminLibList'); S.lib = S.libAll.filter(function (l) { return l.status === 'published'; }); }
+  else S.lib = await api('libraryList');
+}
+function libCard(l, adm) {
+  var isB = l.kind === 'buku', sp = isB ? 'var(--gold)' : (SPINE[l.jenis] || 'var(--accent)');
+  var kd = isB ? '<b>' + esc(l.category || 'Buku') + '</b><span>' + esc(l.publisher || '') + '</span>'
+               : '<b>' + esc(l.jenis) + '</b><span>' + esc(l.jenjang) + ' · ' + esc(l.konsentrasi) + '</span>';
+  var tags = '';
+  if (l.hasFile && l.allowDl !== 'Y') tags += '<span class="tag a">Hanya baca</span>';
+  if (l.source === 'deposit') tags += '<span class="tag b">Deposit alumni</span>';
+  var acts = '';
+  if (l.hasFile) acts += '<button class="btn sm primary" data-act="rd" data-id="' + l.id + '" data-name="' + esc(l.title) + '" data-dl="' + (l.allowDl === 'Y' ? 1 : 0) + '">Baca</button>';
+  if (l.hasFile && l.allowDl === 'Y') acts += '<button class="btn sm" data-act="dl" data-kind="lib" data-purpose="dl" data-id="' + l.id + '">Unduh</button>';
+  if (safeUrl(l.url)) acts += '<a class="btn sm" href="' + esc(safeUrl(l.url)) + '" target="_blank" rel="noopener noreferrer">Buka tautan</a>';
+  if (adm) acts += '<button class="btn sm ghost" data-act="libEdit" data-id="' + l.id + '">Sunting</button><button class="btn sm ghost" data-act="libDel" data-id="' + l.id + '">Hapus</button>';
+  return '<article class="bk" style="--sp:' + sp + '"><div class="kd">' + kd + '</div><h3>' + esc(l.title) + '</h3><div class="au">' + esc(l.author) + '</div>' +
+    (l.abstrak ? '<div class="ab">' + esc(l.abstrak) + '</div>' : '') + (tags ? '<div class="tg">' + tags + '</div>' : '') +
+    '<div class="ft"><span class="yr">' + esc(l.year) + '</span></div><div class="acts">' + acts + '</div></article>';
+}
+function pendingPanel() {
+  var P = (S.libAll || []).filter(function (l) { return l.status === 'pending'; });
+  if (!P.length) return '';
+  return '<section class="pend"><h3>Deposit menunggu persetujuan (' + P.length + ')</h3>' + P.map(function (l) {
+    var ok = l.emailVerified === 'Y', wa = String(l.wa || '');
+    return '<div class="pi"><b>' + esc(l.title) + '</b><small>' + esc(l.author) + ' · NPM ' + esc(l.npm) + ' · ' + esc(l.jenis) + ' ' + esc(l.jenjang) + ' · ' + esc(l.konsentrasi) + ' · ' + esc(l.year) + '</small><br>' +
+      '<small>' + esc(l.email) + (wa ? ' · <a href="https://wa.me/' + esc(wa) + '" target="_blank" rel="noopener noreferrer">WhatsApp</a>' : '') + '</small> ' +
+      '<span class="tag ' + (ok ? 'g' : 'a') + '">' + (ok ? 'Email terverifikasi' : 'Email belum dikonfirmasi') + '</span>' +
+      (l.abstrak ? '<div class="ab" style="margin-top:6px;font-size:.85rem;color:var(--muted)">' + esc(l.abstrak) + '</div>' : '') +
+      '<div class="acts"><button class="btn sm" data-act="rd" data-id="' + l.id + '" data-name="' + esc(l.title) + '" data-dl="1">Baca</button>' +
+      '<button class="btn sm good" data-act="libOk" data-id="' + l.id + '"' + (ok ? '' : ' disabled') + '>Setujui</button>' +
+      '<button class="btn sm ghost" data-act="libNo" data-id="' + l.id + '">Tolak</button></div></div>';
+  }).join('') + '</section>';
+}
 function libView() {
-  var L = S.lib || [], f = S.lf, q = S.libq.toLowerCase(), cnt = { Skripsi: 0, Tesis: 0, Artikel: 0 };
-  L.forEach(function (l) { cnt[l.jenis] = (cnt[l.jenis] || 0) + 1; });
-  var items = L.filter(function (l) {
-    if (f.j !== 'all' && l.jenis !== f.j) return false;
-    if (f.k !== 'all' && l.konsentrasi !== f.k) return false;
-    return !q || (l.title + ' ' + l.author + ' ' + l.jenis + ' ' + l.konsentrasi + ' ' + l.year).toLowerCase().indexOf(q) >= 0;
+  var adm = isAdm(), L = S.lib || [], f = S.lf, q = S.libq.toLowerCase();
+  var books = L.filter(function (l) { return l.kind === 'buku'; }), tas = L.filter(function (l) { return l.kind !== 'buku'; });
+  if (!S.lc) S.lc = (books.length || !tas.length) ? 'buku' : 'ta';
+  var isB = S.lc === 'buku', base = isB ? books : tas, cnt = { Skripsi: 0, Tesis: 0, Artikel: 0 };
+  tas.forEach(function (l) { cnt[l.jenis] = (cnt[l.jenis] || 0) + 1; });
+  var items = base.filter(function (l) {
+    if (isB) { if (f.c !== 'all' && l.category !== f.c) return false; }
+    else { if (f.j !== 'all' && l.jenis !== f.j) return false; if (f.k !== 'all' && l.konsentrasi !== f.k) return false; }
+    return !q || [l.title, l.author, l.publisher, l.category, l.jenis, l.konsentrasi, l.year].join(' ').toLowerCase().indexOf(q) >= 0;
   });
   if (f.s === 'az') items = items.slice().sort(function (a, b) { return String(a.title).localeCompare(b.title); });
-  var seg = [['all', 'Semua'], ['Skripsi', 'Skripsi'], ['Tesis', 'Tesis'], ['Artikel', 'Artikel']].map(function (x) { return '<button class="' + (f.j === x[0] ? 'on' : '') + '" data-act="libj" data-j="' + x[0] + '">' + x[1] + '</button>'; }).join('');
-  var h = '<div class="pg"><h1>Perpustakaan karya</h1><p>Karya bimbingan yang telah selesai, sebagai rujukan penulisan dan metode.</p></div>' +
-    strip([['Seluruh karya', L.length], ['Skripsi', cnt.Skripsi, 'var(--accent)'], ['Tesis', cnt.Tesis, 'var(--violet)'], ['Artikel', cnt.Artikel, 'var(--teal)']]) +
-    '<div class="tools"><input class="inp" placeholder="Cari judul, penulis, atau tahun" value="' + esc(S.libq) + '" data-inp="libq" aria-label="Cari karya">' +
-    '<select class="inp" style="flex:0 0 170px" data-chg="libk" aria-label="Konsentrasi"><option value="all">Semua konsentrasi</option><option' + (f.k === 'Pemasaran' ? ' selected' : '') + '>Pemasaran</option><option' + (f.k === 'MSDM' ? ' selected' : '') + '>MSDM</option></select>' +
-    '<select class="inp" style="flex:0 0 150px" data-chg="libs" aria-label="Urutan"><option value="new">Terbaru</option><option value="az"' + (f.s === 'az' ? ' selected' : '') + '>Judul A-Z</option></select></div>' +
-    '<div style="margin-top:12px"><div class="seg">' + seg + '</div></div>';
+  else if (f.s === 'yr') items = items.slice().sort(function (a, b) { return (+b.year) - (+a.year); });
+  var tabs = '<div class="seg"><button class="' + (isB ? 'on' : '') + '" data-act="lc" data-c="buku">Buku (' + books.length + ')</button><button class="' + (!isB ? 'on' : '') + '" data-act="lc" data-c="ta">Tugas akhir dan artikel (' + tas.length + ')</button></div>';
+  var sel = isB
+    ? '<select class="inp" style="flex:0 0 200px" data-chg="libc" aria-label="Kategori"><option value="all">Semua kategori</option>' + BOOK_CATS.map(function (c) { return '<option' + (f.c === c ? ' selected' : '') + '>' + c + '</option>'; }).join('') + '</select>'
+    : '<select class="inp" style="flex:0 0 170px" data-chg="libk" aria-label="Konsentrasi"><option value="all">Semua konsentrasi</option><option' + (f.k === 'Pemasaran' ? ' selected' : '') + '>Pemasaran</option><option' + (f.k === 'MSDM' ? ' selected' : '') + '>MSDM</option></select>';
+  var h = '<div class="pg"><h1>Perpustakaan</h1><p>Buku rujukan dan kumpulan tugas akhir serta artikel. Semua koleksi dapat dibaca langsung di sini.</p></div>' +
+    strip([['Buku', books.length, 'var(--gold-ink)'], ['Skripsi', cnt.Skripsi, 'var(--accent)'], ['Tesis', cnt.Tesis, 'var(--violet)'], ['Artikel', cnt.Artikel, 'var(--teal)']]) +
+    '<div class="cols">' + tabs + (adm && isB ? '<button class="btn primary sm" data-act="libAdd">+ Tambah buku</button>' : '') + '</div>' + (adm ? pendingPanel() : '') +
+    '<div class="tools"><input class="inp" placeholder="' + (isB ? 'Cari judul, penulis, atau penerbit' : 'Cari judul, penulis, atau tahun') + '" value="' + esc(S.libq) + '" data-inp="libq" aria-label="Cari koleksi">' + sel +
+    '<select class="inp" style="flex:0 0 150px" data-chg="libs" aria-label="Urutan"><option value="new">Terbaru ditambah</option><option value="yr"' + (f.s === 'yr' ? ' selected' : '') + '>Tahun terbit</option><option value="az"' + (f.s === 'az' ? ' selected' : '') + '>Judul A-Z</option></select></div>';
+  if (!isB) h += '<div style="margin-top:12px"><div class="seg">' + [['all', 'Semua'], ['Skripsi', 'Skripsi'], ['Tesis', 'Tesis'], ['Artikel', 'Artikel']].map(function (x) { return '<button class="' + (f.j === x[0] ? 'on' : '') + '" data-act="libj" data-j="' + x[0] + '">' + x[1] + '</button>'; }).join('') + '</div></div>';
   if (S.lib === null) return h + '<div class="mk"><div class="spin"></div></div>';
-  if (!items.length) return h + '<div class="card mk"><h3>' + (L.length ? 'Tidak ada karya yang cocok' : 'Perpustakaan masih kosong') + '</h3><p class="muted" style="margin:6px 0 0">' + (L.length ? 'Ubah kata kunci atau filter di atas.' : 'Karya yang selesai dan diizinkan penulisnya akan muncul di sini.') + '</p></div>';
-  return h + '<div class="lib">' + items.map(function (l) {
-    return '<article class="bk" style="--sp:' + (SPINE[l.jenis] || 'var(--accent)') + '"><div class="kd"><b>' + esc(l.jenis) + '</b><span>' + esc(l.jenjang) + ' · ' + esc(l.konsentrasi) + '</span></div>' +
-      '<h3>' + esc(l.title) + '</h3><div class="au">' + esc(l.author) + '</div><div class="ft"><span class="yr">' + esc(l.year) + '</span><button class="btn sm" data-act="dl" data-kind="lib" data-id="' + l.id + '">Unduh</button></div></article>';
-  }).join('') + '</div><p class="muted" style="margin:14px 2px 0"><small>Menampilkan ' + items.length + ' dari ' + L.length + ' karya.</small></p>';
+  if (!items.length) {
+    var emp = base.length ? ['Tidak ada koleksi yang cocok', 'Ubah kata kunci atau filter di atas.']
+      : isB ? ['Belum ada buku', adm ? 'Klik Tambah buku untuk mengunggah buku rujukan pertama.' : 'Dosen pembimbing akan menambahkan buku rujukan di sini.']
+            : ['Belum ada tugas akhir atau artikel', 'Karya mahasiswa yang selesai dan alumni yang melakukan deposit akan muncul di sini.'];
+    return h + '<div class="card mk"><h3>' + emp[0] + '</h3><p class="muted" style="margin:6px 0 0">' + emp[1] + '</p></div>';
+  }
+  return h + '<div class="lib">' + items.map(function (l) { return libCard(l, adm); }).join('') + '</div><p class="muted" style="margin:14px 2px 0"><small>Menampilkan ' + items.length + ' dari ' + base.length + ' koleksi.</small></p>';
+}
+
+/* Modal */
+function openModal(html) { var m = $('#modal'); m.innerHTML = html; m.hidden = false; document.body.style.overflow = 'hidden'; }
+function closeModal() { var m = $('#modal'); m.hidden = true; m.innerHTML = ''; if ($('#viewer').hidden) document.body.style.overflow = ''; }
+function libForm(l) {
+  var e = !!l, isB = !l || l.kind === 'buku';
+  return '<form class="card" data-form="libSave"><h2 style="margin:0">' + (e ? 'Sunting koleksi' : 'Tambah buku') + '</h2>' +
+    '<input type="hidden" name="id" value="' + (e ? esc(l.id) : '') + '">' +
+    '<label class="f">Judul<input class="inp" name="title" required minlength="3" maxlength="300" value="' + (e ? esc(l.title) : '') + '"></label>' +
+    '<label class="f">Penulis<input class="inp" name="author" required minlength="2" maxlength="200" value="' + (e ? esc(l.author) : '') + '"></label>' +
+    '<div class="grid2">' + (isB ? '<label class="f">Penerbit<input class="inp" name="publisher" maxlength="150" value="' + (e ? esc(l.publisher) : '') + '"></label>' : '') +
+    '<label class="f">Tahun<input class="inp" name="year" type="number" required min="1900" max="' + (new Date().getFullYear() + 1) + '" value="' + (e ? esc(l.year) : '') + '"></label></div>' +
+    (isB ? '<label class="f">Kategori<select class="inp" name="category">' + BOOK_CATS.map(function (c) { return '<option' + (e && l.category === c ? ' selected' : '') + '>' + c + '</option>'; }).join('') + '</select></label>' : '') +
+    '<label class="f">Ringkasan (opsional)<textarea class="inp" name="abstrak" maxlength="1500" style="min-height:90px">' + (e ? esc(l.abstrak) : '') + '</textarea></label>' +
+    '<label class="f">Berkas PDF' + (e && l.hasFile ? ' (kosongkan bila tidak diganti)' : '') + '<input class="inp" name="file" type="file" accept=".pdf,application/pdf"></label>' +
+    '<p class="muted" style="margin:4px 0 0"><small>Maksimal 20 MB. Untuk buku yang lebih besar, simpan di Drive lalu isi tautan di bawah.</small></p>' +
+    '<label class="f">Tautan eksternal (opsional)<input class="inp" name="url" type="url" maxlength="500" placeholder="https://" value="' + (e ? esc(l.url) : '') + '"></label>' +
+    '<label class="f chk"><input type="checkbox" name="allowDl"' + (!e || l.allowDl === 'Y' ? ' checked' : '') + '><span>Izinkan mahasiswa mengunduh. Bila dimatikan, tombol Unduh disembunyikan dan buku hanya dibaca di aplikasi.</span></label>' +
+    (!e && isB ? '<label class="f chk"><input type="checkbox" name="rightsOk" required><span>Saya berhak membagikan buku ini kepada mahasiswa (karya sendiri, berlisensi terbuka, domain publik, atau sudah ada izin penerbit/penulis).</span></label>' : '') +
+    '<div class="row" style="margin-top:18px;justify-content:flex-end"><button type="button" class="btn" data-act="mdClose">Batal</button><button class="btn primary">Simpan</button></div></form>';
+}
+function libSaveSubmit(f) {
+  var fd = new FormData(f), file = fd.get('file'), id = fd.get('id');
+  if (file && file.size) {
+    if (!/\.pdf$/i.test(file.name)) return toast('Berkas harus PDF.', 'err');
+    if (file.size > 20 * 1048576) return toast('PDF melebihi 20 MB. Simpan di Drive lalu isi tautan.', 'err');
+  } else file = null;
+  return guard(async function () {
+    var body = { id: id, title: fd.get('title'), author: fd.get('author'), publisher: fd.get('publisher') || '', year: fd.get('year'),
+      category: fd.get('category') || '', abstrak: fd.get('abstrak'), url: fd.get('url'), allowDl: !!fd.get('allowDl'), rightsOk: !!fd.get('rightsOk') };
+    if (file) { body.fileName = file.name; body.b64 = await toB64(file); }
+    await api('adminLibSave', body);
+    FC = { id: null, d: null }; closeModal(); await reloadLib(); render(); toast(id ? 'Perubahan disimpan.' : 'Buku ditambahkan.');
+  }, 'Menyimpan…');
+}
+
+/* Pembaca PDF / DOCX */
+var RD = { zoom: 1, kind: '', pdf: null, io: null, token: 0 };
+var FC = { id: null, d: null };
+async function getLibFile(id, purpose) {
+  if (FC.id === id) return FC.d;
+  var d = await api('getFile', { kind: 'lib', id: id, purpose: purpose || '' });
+  FC = { id: id, d: d }; return d;
+}
+var PDFJS = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/';
+async function ensurePdfjs() {
+  if (window.pdfjsLib) return;
+  await loadScript(PDFJS + 'pdf.min.js');
+  var t = await (await fetch(PDFJS + 'pdf.worker.min.js')).text();
+  pdfjsLib.GlobalWorkerOptions.workerSrc = URL.createObjectURL(new Blob([t], { type: 'text/javascript' }));
+}
+function rdLabel() { var z = $('#rzl'); if (z) z.textContent = Math.round(RD.zoom * 100) + '%'; }
+async function rdLayout(tok, keep) {
+  var box = $('#rdoc'); if (!box || !RD.pdf || tok !== RD.token) return;
+  var ratio = keep && box.scrollHeight ? box.scrollTop / box.scrollHeight : 0;
+  var p1 = await RD.pdf.getPage(1), vp = p1.getViewport({ scale: 1 });
+  var w = Math.max(220, box.clientWidth - 16) * RD.zoom, h = vp.height * w / vp.width;
+  if (RD.io) RD.io.disconnect();
+  box.innerHTML = '';
+  RD.io = new IntersectionObserver(function (es) {
+    es.forEach(function (en) { if (en.isIntersecting) { RD.io.unobserve(en.target); rdPage(en.target, tok); } });
+  }, { root: box, rootMargin: '700px 0px' });
+  for (var n = 1; n <= RD.pdf.numPages; n++) {
+    var d = document.createElement('div'); d.className = 'pgw'; d.dataset.n = n; d.style.width = w + 'px'; d.style.height = h + 'px';
+    box.appendChild(d); RD.io.observe(d);
+  }
+  box.scrollTop = ratio * box.scrollHeight; rdLabel(); rdPos();
+}
+async function rdPage(el, tok) {
+  if (tok !== RD.token || !RD.pdf) return;
+  try {
+    var pg = await RD.pdf.getPage(+el.dataset.n), base = pg.getViewport({ scale: 1 });
+    var cssW = parseFloat(el.style.width), dpr = Math.min(2, window.devicePixelRatio || 1), vp = pg.getViewport({ scale: cssW / base.width * dpr });
+    var c = document.createElement('canvas'); c.width = Math.floor(vp.width); c.height = Math.floor(vp.height);
+    el.style.height = (vp.height / dpr) + 'px';
+    await pg.render({ canvasContext: c.getContext('2d'), viewport: vp }).promise;
+    if (tok === RD.token) el.appendChild(c);
+  } catch (e) { /* halaman gagal digambar: biarkan kosong */ }
+}
+function rdPos() {
+  var box = $('#rdoc'), el = $('#rpg'); if (!box || !el || RD.kind !== 'pdf') return;
+  var pgs = box.children, y = box.scrollTop + box.clientHeight / 3, cur = 1;
+  for (var i = 0; i < pgs.length; i++) { if (pgs[i].offsetTop + pgs[i].offsetHeight > y) { cur = i + 1; break; } cur = i + 1; }
+  el.textContent = 'Hal. ' + cur + ' / ' + pgs.length;
+}
+function rdDocxZoom() {
+  var w = $('#rdoc .docx-wrapper'), sec = $('#rdoc section.docx'); if (!w || !sec) return;
+  var fit = ($('#rdoc').clientWidth - 24) / (sec.offsetWidth || 794);
+  w.style.zoom = Math.min(1.5, Math.max(.3, fit)) * RD.zoom; rdLabel();
+}
+async function openReader(id, title, canDl) {
+  var tok = ++RD.token; RD.zoom = 1; RD.kind = '';
+  var v = $('#viewer'); v.hidden = false; document.body.style.overflow = 'hidden';
+  v.innerHTML = '<div class="vh"><button class="btn sm" data-act="vwClose">‹ Tutup</button><div class="vt">' + esc(title) + '</div><small id="rpg"></small>' +
+    '<button class="btn sm" data-act="rdZ" data-d="-1" aria-label="Perkecil">−</button><small id="rzl" style="min-width:42px;text-align:center">100%</small><button class="btn sm" data-act="rdZ" data-d="1" aria-label="Perbesar">+</button>' +
+    (canDl ? '<button class="btn sm" data-act="dl" data-kind="lib" data-purpose="dl" data-id="' + esc(id) + '">⬇ Unduh</button>' : '') + '</div>' +
+    '<div class="vb"><div class="rdoc" id="rdoc"><div class="vmsg"><div class="spin"></div>Memuat…</div></div></div>';
+  try {
+    var d = await getLibFile(id); if (tok !== RD.token) return;
+    var box = $('#rdoc'); if (!box) return;
+    if (/pdf/i.test(d.mime) || /\.pdf$/i.test(d.name || '')) {
+      await ensurePdfjs(); if (tok !== RD.token) return;
+      RD.pdf = await pdfjsLib.getDocument({ data: new Uint8Array(b64ToBuf(d.b64)) }).promise; if (tok !== RD.token) return;
+      RD.kind = 'pdf'; await rdLayout(tok, false);
+      box.addEventListener('scroll', function () { requestAnimationFrame(rdPos); }, { passive: true });
+    } else {
+      await ensureDocx(); if (tok !== RD.token) return;
+      RD.kind = 'docx'; box.innerHTML = '';
+      await window.docx.renderAsync(b64ToBuf(d.b64), box, null, { className: 'docx', inWrapper: true, ignoreWidth: false, breakPages: true, useBase64URL: true });
+      rdDocxZoom();
+    }
+  } catch (e) {
+    if (tok !== RD.token) return;
+    if (e.code === 'AUTH') { closeViewer(); logout(e.message); return; }
+    var b = $('#rdoc'); if (b) b.innerHTML = '<div class="vmsg">Koleksi tidak dapat ditampilkan: ' + esc(e.message || 'kesalahan') + '<br>' + (canDl ? 'Gunakan tombol Unduh untuk membukanya di perangkat Anda.' : '') + '</div>';
+  }
+}
+
+/* Deposit alumni (tanpa login) */
+function depositView() {
+  var yr = new Date().getFullYear();
+  return '<div class="auth"><aside class="ap"><span class="lg">' + ICO.lib + '</span><h1>Deposit karya alumni</h1>' +
+    '<p>Titipkan skripsi, tesis, atau artikel Anda agar menjadi rujukan bagi mahasiswa yang sedang menulis tugas akhir.</p>' +
+    '<ol><li><i>' + CHK + '</i><span>Isi data dan unggah naskah final dalam format PDF.</span></li>' +
+    '<li><i>' + CHK + '</i><span>Konfirmasi email melalui tautan yang kami kirim.</span></li>' +
+    '<li><i>' + CHK + '</i><span>Dosen pembimbing memeriksa, lalu karya Anda terbit di perpustakaan.</span></li></ol></aside>' +
+    '<div class="af"><form class="card" data-form="deposit" autocomplete="on"><h2 style="margin:0">Kirim karya ke perpustakaan</h2>' +
+    '<label class="f">Nama lengkap<input class="inp" name="nama" required minlength="3" maxlength="100" autocomplete="name"></label>' +
+    '<div class="grid2"><label class="f">NPM<input class="inp" name="npm" required maxlength="25"></label>' +
+    '<label class="f">Tahun lulus<input class="inp" name="tahun" type="number" required min="1990" max="' + (yr + 1) + '" value="' + yr + '"></label></div>' +
+    '<div class="grid2"><label class="f">Jenjang<select class="inp" name="jenjang" data-chg="jenjang" required><option value="">Pilih</option><option>S1</option><option>S2</option></select></label>' +
+    '<label class="f">Jenis karya<select class="inp" name="jenis" required disabled><option value="">Pilih jenjang dahulu</option></select></label></div>' +
+    '<label class="f">Program studi atau konsentrasi<input class="inp" name="konsentrasi" required minlength="2" maxlength="100" list="kons"><datalist id="kons"><option>Pemasaran</option><option>MSDM</option></datalist></label>' +
+    '<label class="f">Judul karya<textarea class="inp" name="judul" required minlength="10" maxlength="300" style="min-height:84px"></textarea></label>' +
+    '<label class="f">Abstrak (opsional)<textarea class="inp" name="abstrak" maxlength="1500" style="min-height:100px"></textarea></label>' +
+    '<div class="grid2"><label class="f">Email aktif<input class="inp" name="email" type="email" required autocomplete="email"></label>' +
+    '<label class="f">No. WhatsApp<input class="inp" name="wa" type="tel" required placeholder="08xxxxxxxxxx" autocomplete="tel"></label></div>' +
+    '<label class="f">Berkas PDF (maks. 15 MB)<input class="inp" name="file" type="file" accept=".pdf,application/pdf" required></label>' +
+    '<label class="f">Verifikasi bukan robot<span class="cap"><span class="q" id="capq">…</span><input class="inp" id="capa" inputmode="numeric" required style="margin:0" placeholder="Jawaban"><button type="button" class="btn sm" data-act="cap" aria-label="Soal baru">↻</button></span></label>' +
+    '<input class="hp" name="website" tabindex="-1" autocomplete="off" aria-hidden="true">' +
+    '<label class="f chk"><input type="checkbox" name="consentPublish" required><span>Saya adalah penulis karya ini dan mengizinkannya dipublikasikan di perpustakaan layanan ini, dapat dibaca dan diunduh mahasiswa untuk keperluan akademik.</span></label>' +
+    '<button class="btn primary block" style="margin-top:18px">Kirim deposit</button>' +
+    '<p style="text-align:center;margin:14px 0 0"><button type="button" class="lnk" data-act="toLogin">Kembali ke halaman masuk</button></p></form></div></div>';
+}
+function depositSubmit(f) {
+  var fd = new FormData(f), file = fd.get('file');
+  if (!file || !file.size) return toast('Pilih berkas PDF.', 'err');
+  if (!/\.pdf$/i.test(file.name)) return toast('Berkas harus PDF.', 'err');
+  if (file.size > 15 * 1048576) return toast('PDF melebihi 15 MB.', 'err');
+  if (!S.cap) return toast('Soal verifikasi belum termuat. Klik tombol muat ulang.', 'err');
+  var email = String(fd.get('email') || '').trim();
+  return guard(async function () {
+    try {
+      await api('depositSubmit', { nama: fd.get('nama'), npm: fd.get('npm'), tahun: fd.get('tahun'), jenjang: fd.get('jenjang'), jenis: fd.get('jenis'),
+        konsentrasi: fd.get('konsentrasi'), judul: fd.get('judul'), abstrak: fd.get('abstrak'), email: email, wa: fd.get('wa'), website: fd.get('website'),
+        consentPublish: !!fd.get('consentPublish'), fileName: file.name, b64: await toB64(file), captchaToken: S.cap.token, captchaAnswer: $('#capa').value }, true);
+    } catch (err) { loadCaptcha(); throw err; }
+    S.pendingEmail = email.toLowerCase(); S.view = 'depDone'; render(); window.scrollTo(0, 0);
+  }, 'Mengirim karya…');
 }
 
 /* ---------- Dosen ---------- */
@@ -821,9 +1055,9 @@ async function openViewer(id, name) {
     var b = $('#vdoc'); if (b) b.innerHTML = '<div class="vmsg">Naskah tidak dapat ditampilkan: ' + esc(e.message || 'kesalahan') + '<br>Gunakan tombol Unduh untuk membukanya di Word.</div>';
   }
 }
-function closeViewer() { $('#viewer').hidden = true; $('#viewer').innerHTML = ''; document.body.style.overflow = ''; if (S.view === 'adminDetail') render(); }
+function closeViewer() { RD.token++; if (RD.io) { RD.io.disconnect(); RD.io = null; } if (RD.pdf) { try { RD.pdf.destroy(); } catch (e) {} RD.pdf = null; } RD.kind = ''; $('#viewer').hidden = true; $('#viewer').innerHTML = ''; document.body.style.overflow = ''; if (S.view === 'adminDetail') render(); }
 window.addEventListener('resize', function () { if (!$('#viewer').hidden && VW.fit) vwApplyZoom(); });
-document.addEventListener('keydown', function (e) { if (e.key === 'Escape' && !$('#viewer').hidden) closeViewer(); });
+document.addEventListener('keydown', function (e) { if (e.key !== 'Escape') return; if (!$('#modal').hidden) closeModal(); else if (!$('#viewer').hidden) closeViewer(); });
 
 /* ------------------------------ Actions ------------------------------ */
 async function guard(fn, msg) {
@@ -838,7 +1072,7 @@ async function refreshAfter(id) {
 var ACT = {
   go: async function (t) {
     var v = t.dataset.v; S.view = v;
-    if (v === 'lib') { S.lib = null; render(); S.lib = await api('libraryList'); }
+    if (v === 'lib') { S.lib = null; render(); await reloadLib(); }
     if (v === 'adminList') await loadList();
     render();
   },
@@ -896,7 +1130,33 @@ var ACT = {
   },
   back: async function () { S.view = 'adminList'; await loadList(); render(); },
   open: function (t) { return guard(async function () { await loadDetail(t.dataset.id); S.view = 'adminDetail'; S.open = {}; render(); window.scrollTo(0, 0); }, 'Membuka…'); },
-  dl: function (t) { return guard(async function () { download(await api('getFile', { kind: t.dataset.kind, id: t.dataset.id })); }, 'Menyiapkan berkas…'); },
+  dl: function (t) { return guard(async function () {
+    if (t.dataset.kind === 'lib') download(await getLibFile(t.dataset.id, 'dl'));
+    else download(await api('getFile', { kind: t.dataset.kind, id: t.dataset.id }));
+  }, 'Menyiapkan berkas…'); },
+  rd: function (t) { return openReader(t.dataset.id, t.dataset.name || 'Koleksi', t.dataset.dl === '1'); },
+  rdZ: function (t) {
+    RD.zoom = Math.min(3, Math.max(.5, Math.round((RD.zoom + (+t.dataset.d) * .25) * 100) / 100));
+    if (RD.kind === 'pdf') return rdLayout(RD.token, true); if (RD.kind === 'docx') rdDocxZoom();
+  },
+  lc: function (t) { S.lc = t.dataset.c; render(); },
+  toDeposit: function () { S.view = 'deposit'; render(); window.scrollTo(0, 0); },
+  mdClose: function () { closeModal(); },
+  libAdd: function () { openModal(libForm(null)); },
+  libEdit: function (t) { var l = (S.libAll || S.lib || []).filter(function (x) { return x.id === t.dataset.id; })[0]; if (l) openModal(libForm(l)); },
+  libDel: function (t) {
+    var l = (S.libAll || []).filter(function (x) { return x.id === t.dataset.id; })[0]; if (!l) return;
+    if (!confirm('Hapus "' + l.title + '" dari perpustakaan?' + (l.source === 'app' ? '\nBerkas final mahasiswa tetap tersimpan di foldernya.' : '\nBerkasnya ikut dibuang dari Drive.'))) return;
+    return guard(async function () { await api('adminLibDelete', { id: l.id }); FC = { id: null, d: null }; await reloadLib(); render(); toast('Koleksi dihapus.'); }, 'Menghapus…');
+  },
+  libOk: function (t) {
+    if (!confirm('Terbitkan karya ini di perpustakaan? Pastikan isinya sesuai dan penulisnya benar alumni.')) return;
+    return guard(async function () { await api('adminLibDecide', { id: t.dataset.id, decision: 'publish' }); await reloadLib(); render(); toast('Karya diterbitkan.'); }, 'Menerbitkan…');
+  },
+  libNo: function (t) {
+    var note = prompt('Alasan penolakan (akan dikirim ke pengirim):'); if (note === null) return;
+    return guard(async function () { await api('adminLibDecide', { id: t.dataset.id, decision: 'reject', note: note }); await reloadLib(); render(); toast('Deposit ditolak.'); }, 'Memproses…');
+  },
   verify: function (t) { return guard(async function () { await api('adminVerify', { userId: t.dataset.id }); await refreshAfter(); toast('Mahasiswa diverifikasi.'); }, 'Memproses…'); },
   ai: function (t) {
     return guard(async function () { store.del('draft_' + t.dataset.id); await api('aiReview', { submissionId: t.dataset.id }); await refreshAfter(); toast('Pemeriksaan selesai.'); },
@@ -929,6 +1189,7 @@ var ACT = {
 };
 
 var CHG = {
+  libc: function (el) { S.lf.c = el.value; render(); },
   libk: function (el) { S.lf.k = el.value; render(); },
   libs: function (el) { S.lf.s = el.value; render(); },
   jenjang: function (el) {
@@ -975,6 +1236,8 @@ document.addEventListener('input', function (e) {
 });
 document.addEventListener('submit', function (e) {
   var f = e.target.closest('form[data-form]'); if (!f) return; e.preventDefault();
+  if (f.dataset.form === 'libSave') return libSaveSubmit(f);
+  if (f.dataset.form === 'deposit') return depositSubmit(f);
   var fd = Object.fromEntries(new FormData(f).entries());
   if (f.dataset.form === 'login') {
     guard(async function () {
