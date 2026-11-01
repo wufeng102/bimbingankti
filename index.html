@@ -156,6 +156,14 @@ select.inp{appearance:none;background-image:linear-gradient(45deg,transparent 50
 .ap li{display:flex;gap:12px;align-items:flex-start;color:rgba(255,255,255,.92);font-size:.93rem}
 .ap li i{flex:none;width:22px;height:22px;border-radius:50%;background:var(--gold);color:var(--navy);display:grid;place-items:center;margin-top:1px}
 .af .card{margin-top:0}
+.guide{display:flex;align-items:center;gap:14px;margin-bottom:14px;padding:14px 16px;border:1px solid var(--line);border-radius:16px;background:var(--card);color:var(--text);text-decoration:none;transition:border-color .15s,box-shadow .15s}
+.guide:hover{border-color:var(--gold);box-shadow:0 6px 18px rgba(12,30,63,.08)}
+.guide:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.guide .gi{flex:none;width:42px;height:42px;border-radius:12px;display:grid;place-items:center;background:var(--navy);color:var(--gold)}
+.guide .gi svg{width:22px;height:22px}
+.guide b{display:block;font-size:.95rem}
+.guide small{display:block;color:var(--muted);font-size:.82rem;margin-top:2px}
+.guide .gd{margin-left:auto;flex:none;color:var(--accent);font-weight:600;font-size:.88rem}
 @media(max-width:820px){.auth{grid-template-columns:1fr}.ap{position:static;padding:24px 22px}.ap ol{display:none}}
 
 /* timeline */
@@ -292,7 +300,8 @@ hr.s{border:0;border-top:1px solid var(--line);margin:16px 0}
 /* ======================= KONFIGURASI (isi 2 nilai ini) ======================= */
 var CONFIG = {
   GAS_URL: 'https://script.google.com/macros/s/AKfycbwvCglJ-tiUGfw49DyFuX3BY0mSK0sp1DololyWmev4Tffo8iCq3ZMYhDdoaRMhxbbgzA/exec',         // berakhiran /exec
-  FIREBASE_API_KEY: 'AIzaSyDlFqbhYMg4wX6uClPIglsoTG24Yf2CvnU'    // Firebase project bimbingan-kti
+  FIREBASE_API_KEY: 'AIzaSyDlFqbhYMg4wX6uClPIglsoTG24Yf2CvnU',    // Firebase project bimbingan-kti
+  GUIDE_URL: 'https://drive.google.com/uc?export=download&id=1HkvBTs3tKtrGLCu7LCn0bg_0wQ1fXKND' // buku panduan (PDF)
 };
 /* ============================================================================= */
 
@@ -528,7 +537,10 @@ function authView() {
     '<input class="hp" name="website" tabindex="-1" autocomplete="off" aria-hidden="true">' +
     '<label class="f" style="display:flex;gap:10px;align-items:flex-start;color:var(--text);font-weight:400"><input type="checkbox" name="consentAi" required style="margin-top:4px;width:18px;height:18px"><span>Saya menyetujui dokumen dan data saya diproses untuk keperluan bimbingan, termasuk pemeriksaan awal dengan bantuan kecerdasan buatan yang kemudian ditinjau dosen pembimbing.</span></label>' +
     '<button class="btn primary block" style="margin-top:18px">Buat akun</button></form>';
-  return '<div class="auth">' + side + '<div class="af">' + form + '</div></div>';
+  var guide = '<a class="guide" href="' + CONFIG.GUIDE_URL + '" download="Buku-Panduan-E-Theses-System.pdf" rel="noopener">' +
+    '<span class="gi"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 5a2 2 0 0 1 2-2h12v16H6a2 2 0 0 0-2 2z"/><path d="M4 21V5"/><path d="M12 7v6m0 0-2.5-2.5M12 13l2.5-2.5"/></svg></span>' +
+    '<span><b>Buku panduan penggunaan</b><small>Langkah demi langkah, format PDF</small></span><span class="gd">Unduh</span></a>';
+  return '<div class="auth">' + side + '<div class="af">' + guide + form + '</div></div>';
 }
 
 function strip(items) {
