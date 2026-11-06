@@ -243,6 +243,14 @@ hr.s{border:0;border-top:1px solid var(--line);margin:16px 0}
 .pulse{width:8px;height:8px;border-radius:50%;background:var(--amber);display:inline-block;margin-right:6px;animation:pl 1.6s ease-in-out infinite}
 @keyframes pl{50%{opacity:.35;transform:scale(.8)}}
 .ai{border:1px solid var(--line);border-radius:14px;padding:12px 14px;margin-top:10px}
+.ai .sub{margin:10px 0 0;padding-top:10px;border-top:1px solid var(--line)}
+.ai .sub b{display:block;font-size:.85rem;margin-bottom:4px}
+.ai .sub ul{margin:4px 0 0;padding-left:18px;font-size:.88rem;line-height:1.5}
+.sg{border:1px solid var(--line);border-radius:12px;padding:10px 14px;margin-top:8px}
+.sg b{display:block}.sg p{margin:4px 0 0;font-size:.9rem}.sg small{display:block;margin-top:4px;color:var(--muted)}
+.idle{background:color-mix(in srgb,var(--red) 12%,transparent);color:var(--red)}
+.mdbox{max-width:520px;margin:0 auto}
+.mdbox textarea{min-height:150px}
 .ai .sum{white-space:pre-wrap;font-size:.9rem;margin:6px 0 0}
 .mk{display:grid;place-items:center;text-align:center;padding:40px 20px}
 .mk .big{font-size:3rem}
@@ -593,7 +601,7 @@ function roundHtml(rd, admin) {
   if (rd.lecturerFileName) f += '<button class="lnk" data-act="dl" data-kind="lec" data-id="' + rd.id + '">⬇ Berkas dari dosen</button>';
   return '<div class="round"><div class="rhead"><b>Pengajuan ke-' + rd.version + '</b>' + tag + '<small>' + fmt(rd.submittedAt) + '</small></div><div class="rfiles">' + f + '</div>' +
     (rd.note ? '<div class="note"><small>Catatan pembimbing</small><p>' + esc(rd.note) + '</p></div>' : '') +
-    (rd.closingNote ? '<div class="note"><small>Catatan penutup tahap</small><p>' + esc(rd.closingNote) + '</p></div>' : '') + '</div>';
+    (rd.closingNote ? '<div class="note"><small>Catatan penutup tahap</small><p>' + esc(rd.closingNote) + '</p></div>' : '') + titleSuggestHtml(rd) + '</div>';
 }
 
 function studentView() {
@@ -615,6 +623,7 @@ function studentView() {
   if (m.canFinal) h += '<div class="card"><h2>Seluruh tahapan diterima</h2><p class="muted">Unggah berkas final (PDF atau DOCX). Setelah diunggah, akses akun akan ditutup otomatis.</p>' +
     '<label class="f" style="display:flex;gap:10px;align-items:flex-start;color:var(--text);font-weight:400"><input type="checkbox" id="consentLib" checked style="margin-top:4px;width:18px;height:18px"><span>Izinkan karya saya ditampilkan di perpustakaan bimbingan (hanya dapat dilihat mahasiswa bimbingan yang memiliki akses).</span></label>' +
     '<label class="drop"><input type="file" accept=".pdf,.docx" hidden data-chg="final"><b>Pilih berkas final</b><small>PDF atau DOCX, maksimal ' + m.config.maxMb + ' MB</small></label></div>';
+  h += catatanCard(m.catatan, '');
   return h + timeline(m.stages, false);
 }
 
@@ -910,14 +919,16 @@ function adminListView() {
   var by = function (key, val) { var t = L.filter(function (u) { return u[key] === val; }); return { t: t.length, d: t.filter(function (u) { return u.status === 'closed'; }).length }; };
   var mx = Math.max(1, by('jenis', 'Skripsi').t, by('jenis', 'Tesis').t, by('jenis', 'Artikel').t);
   var mk = Math.max(1, by('konsentrasi', 'Pemasaran').t, by('konsentrasi', 'MSDM').t);
+  var idleN = L.filter(function (u) { return u.idle; }).length;
   var rows = L.filter(function (u) {
     if (S.flt === 'wait' && !u.waiting) return false;
     if (S.flt === 'active' && u.status === 'closed') return false;
     if (S.flt === 'done' && u.status !== 'closed') return false;
+    if (S.flt === 'idle' && !u.idle) return false;
     return !q || (u.nama + ' ' + u.npm + ' ' + u.judul).toLowerCase().indexOf(q) >= 0;
   }).sort(function (a, b) { return (b.waiting - a.waiting) || String(a.nama).localeCompare(b.nama); });
-  var fl = [['all', 'Semua'], ['wait', 'Perlu review'], ['active', 'Berproses'], ['done', 'Selesai']].map(function (f) { return '<button class="' + (S.flt === f[0] ? 'on' : '') + '" data-act="flt" data-f="' + f[0] + '">' + f[1] + '</button>'; }).join('');
-  var h = '<div class="pg"><h1>Dashboard pembimbing</h1><p>' + esc(today()) + '</p></div>' +
+  var fl = [['all', 'Semua'], ['wait', 'Perlu review'], ['idle', 'Tanpa progres (' + idleN + ')'], ['active', 'Berproses'], ['done', 'Selesai']].map(function (f) { return '<button class="' + (S.flt === f[0] ? 'on' : '') + '" data-act="flt" data-f="' + f[0] + '">' + f[1] + '</button>'; }).join('');
+  var h = '<div class="pg"><h1>Dashboard pembimbing</h1><p>' + esc(today()) + '</p><button class="btn sm" data-act="assets">Pengaturan dokumen</button></div>' +
     strip([['Seluruh mahasiswa', L.length, '', unv ? unv + ' belum verifikasi email' : 'semua terverifikasi'], ['Berproses', run, 'var(--accent)', 'sedang menyusun'], ['Perlu review', wait.length, wait.length ? 'var(--amber)' : '', 'menunggu catatan Anda'], ['Selesai', done.length, 'var(--green)', 'akun sudah ditutup']]) +
     '<div class="pn"><div class="row"><h3>Status bimbingan</h3><small class="sp"></small><small>' + L.length + ' mahasiswa</small></div>' +
     '<div class="sbar" role="img" aria-label="Selesai ' + done.length + ', perlu review ' + wait.length + ', berproses ' + run + '">' +
@@ -935,7 +946,7 @@ function adminListView() {
     return '<button class="rw ' + (u.status === 'closed' ? 'fin' : '') + '" data-act="open" data-id="' + u.id + '">' + avatar(u.nama) +
       '<div class="nm"><b>' + esc(u.nama) + '</b><small>' + esc(u.npm) + ', ' + esc(u.jenis) + ' ' + esc(u.jenjang) + ' ' + esc(u.konsentrasi) + '</small></div>' +
       '<div class="pr"><small><span>' + esc(u.currentLabel) + '</span><b>' + u.progress.pct + '%</b></small><div class="bar"><i style="width:' + u.progress.pct + '%"></i></div></div>' +
-      '<div class="tg">' + st + (u.verified !== 'Y' ? ' <span class="tag r">Belum verifikasi</span>' : '') + '</div></button>';
+      '<div class="tg">' + st + (u.idle ? ' <span class="tag idle">Tanpa progres ' + u.idleDays + ' hari</span>' : '') + (u.verified !== 'Y' ? ' <span class="tag r">Belum verifikasi</span>' : '') + '</div></button>';
   }).join('') + '</div>';
 }
 
@@ -946,11 +957,12 @@ function adminDetailView() {
     '<div class="chips"><span class="chip">' + esc(p.jenis) + ' ' + esc(p.jenjang) + '</span><span class="chip">' + esc(p.konsentrasi) + '</span><span class="chip">' + (p.status === 'closed' ? 'Akun ditutup' : 'Akun aktif') + '</span></div>' +
     '<div class="acts"><a class="btn sm wa" target="_blank" rel="noopener" href="https://wa.me/' + esc(p.wa) + '">WhatsApp</a><a class="btn sm" href="mailto:' + esc(p.email) + '">Email</a>' +
     (p.verified !== 'Y' ? '<button class="btn sm warn" data-act="verify" data-id="' + p.id + '">Verifikasi manual</button>' : '') +
-    (p.hasFinal ? '<button class="btn sm good" data-act="dl" data-kind="final" data-id="' + p.id + '">Unduh berkas final</button>' : '') + '</div></div>' +
+    (p.hasFinal ? '<button class="btn sm good" data-act="dl" data-kind="final" data-id="' + p.id + '">Unduh berkas final</button>' : '') +
+    (d.remind && d.remind.ball === 'mahasiswa' ? '<button class="btn sm ' + (d.remind.idle ? 'warn' : '') + '" data-act="remind" data-id="' + p.id + '">Ingatkan mahasiswa' + (d.remind.idleDays ? ' (' + d.remind.idleDays + ' hari)' : '') + '</button>' : '') + '</div></div>' +
     '<div class="pc"><b>' + d.progress.pct + '%</b><small>' + d.progress.done + ' dari ' + d.progress.total + ' tahap</small></div></div>' + jalur(ms) + '</section>' +
     '<div class="card"><small>Email ' + esc(p.email) + ', WA ' + esc(p.wa) + '<br>Tanggal lahir ' + esc(p.tglLahir) + '<br>Alamat ' + esc(p.alamat) + '<br>' +
     (p.status === 'closed' ? 'Akun ditutup ' + fmt(p.closedAt) + '. ' : '') + 'Perpustakaan: ' + (p.consentLibrary === 'Y' ? 'diizinkan' : p.consentLibrary === 'N' ? 'tidak diizinkan' : 'belum ditentukan') + '</small></div>';
-  return h + timeline(d.stages, true);
+  return h + catatanCard(d.catatan, p.id) + timeline(d.stages, true);
 }
 
 
@@ -1002,7 +1014,7 @@ function adminPanel(s, rd) {
   var draft = store.get('draft_' + id), text = draft != null ? draft : (ai ? ai.catatan_untuk_mahasiswa : '');
   var stx = { pending: 'Dalam antrean, diperiksa otomatis (±5 menit)', processing: 'Sedang diperiksa…', done: 'Selesai ' + fmt(rd.aiAt), error: 'Gagal: ' + esc(rd.aiError) }[st] || 'Belum diperiksa';
   var a = '<div class="ai"><div class="row"><b>Pemeriksaan Claude</b>' + (ai ? '<span class="tag ' + (ai.rekomendasi === 'lanjut' ? 'g' : 'a') + '">' + (ai.rekomendasi === 'lanjut' ? 'Rekomendasi: lanjut' : 'Rekomendasi: revisi') + '</span>' : '') + '<small class="sp"></small></div>' +
-    '<small>' + stx + '</small>' + (ai ? '<p class="sum">' + esc(ai.ringkasan) + '</p>' : '') +
+    '<small>' + stx + '</small>' + (ai ? '<p class="sum">' + esc(ai.ringkasan) + '</p>' + aiExtraHtml(ai) : '') +
     '<div class="row" style="margin-top:10px">' + (rd.hasAiPdf ? '<button class="btn sm" data-act="dl" data-kind="ai" data-id="' + id + '">Lihat PDF hasil</button>' : '') +
     '<button class="btn sm" data-act="ai" data-id="' + id + '">' + (st === 'done' ? 'Periksa ulang' : st === 'error' ? 'Coba lagi' : 'Periksa sekarang') + '</button></div></div>';
   var isJudul = s.key === 'judul';
@@ -1100,6 +1112,149 @@ async function refreshAfter(id) {
   if (S.view === 'adminDetail') { await loadDetail(S.detail.id); await loadList(); } else await loadMe();
   render();
 }
+/* ------------------------------ Catatan proses bimbingan (PDF) ------------------------------ */
+var JSPDF = 'https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js';
+var AUTOT = 'https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js';
+async function ensurePdfLib() {
+  if (!(window.jspdf && window.jspdf.jsPDF)) await loadScript(JSPDF);
+  var d = new window.jspdf.jsPDF();
+  if (typeof d.autoTable !== 'function') await loadScript(AUTOT);
+}
+function pdfTxt(t) { return String(t == null ? '' : t).replace(/\r/g, '').replace(/[‘’]/g, "'").replace(/[“”]/g, '"').replace(/[^\x09\x0A\x20-\x7E -ÿ–—•…]/g, ''); }
+function dataUrl(a) { return a ? 'data:' + a.mime + ';base64,' + a.b64 : null; }
+function buildCatatanPdf(D) {
+  var J = window.jspdf.jsPDF, doc = new J({ orientation: 'landscape', unit: 'mm', format: 'a4' });
+  var W = 297, H = 210, M = 15, m = D.meta, y = M, logo = dataUrl(D.logo), ttd = dataUrl(D.ttd);
+  /* kepala: logo kanan atas, nama prodi di sisi kiri logo */
+  var lw = 0;
+  if (logo) {
+    try { var ip = doc.getImageProperties(logo), lh = 22; lw = lh * ip.width / ip.height; if (lw > 40) { lw = 40; lh = lw * ip.height / ip.width; } doc.addImage(logo, W - M - lw, y, lw, lh); } catch (e) { lw = 0; }
+  }
+  doc.setFont('helvetica', 'bold'); doc.setFontSize(13);
+  var px = W - M - lw - (lw ? 4 : 0);
+  doc.text('Universitas Muhammadiyah Bengkulu', px, y + 8, { align: 'right' });
+  doc.setFontSize(11); doc.text(pdfTxt(m.prodi), px, y + 14.5, { align: 'right' });
+  y += 28;
+  /* identitas */
+  doc.setFontSize(11);
+  function idRow(k, v) {
+    doc.setFont('helvetica', 'bold'); doc.text(k, M, y); doc.text(':', M + 24, y);
+    doc.setFont('helvetica', 'normal'); var ls = doc.splitTextToSize(pdfTxt(v), W - 2 * M - 28);
+    doc.text(ls, M + 28, y); y += 5.6 * ls.length;
+  }
+  idRow('Nama', m.nama); idRow('NPM', m.npm); idRow('Judul', m.judul);
+  y += 3;
+  /* judul dokumen */
+  doc.setFont('helvetica', 'bold'); doc.setFontSize(14);
+  var tt = pdfTxt(m.docTitle); doc.text(tt, W / 2, y + 4, { align: 'center' });
+  var tw = doc.getTextWidth(tt); doc.setLineWidth(.5); doc.line(W / 2 - tw / 2, y + 6, W / 2 + tw / 2, y + 6);
+  doc.setFont('helvetica', 'italic'); doc.setFontSize(10);
+  doc.text('Sampai dengan ' + pdfTxt(m.milestone), W / 2, y + 11.5, { align: 'center' });
+  y += 16;
+  /* tabel */
+  var body = [], any = false;
+  D.rows.forEach(function (r) {
+    any = true; var has = !!pdfTxt(r.catatan).trim();
+    if (has) {
+      body.push([{ content: String(r.no), rowSpan: 2, styles: { halign: 'center', valign: 'middle' } }, { content: pdfTxt(r.tanggal), rowSpan: 2, styles: { valign: 'middle' } },
+        { content: pdfTxt(r.head), styles: { fontStyle: 'bold', fillColor: [244, 244, 246] } }, { content: '', rowSpan: 2, styles: { halign: 'center', valign: 'middle' }, _check: true }]);
+      body.push([{ content: pdfTxt(r.catatan), styles: { cellPadding: { top: 2, bottom: 3, left: 2.5, right: 2.5 } } }]);
+    } else {
+      body.push([{ content: String(r.no), styles: { halign: 'center' } }, pdfTxt(r.tanggal), { content: pdfTxt(r.head), styles: { fontStyle: 'bold' } }, { content: '', styles: { halign: 'center' }, _check: true }]);
+    }
+  });
+  if (!any) body.push([{ content: 'Belum ada catatan bimbingan yang tercatat.', colSpan: 4, styles: { halign: 'center', fontStyle: 'italic' } }]);
+  doc.autoTable({
+    startY: y, margin: { left: M, right: M, top: 18, bottom: 16 }, theme: 'grid',
+    head: [['No', 'Tanggal', 'Catatan', 'Paraf']],
+    body: body,
+    styles: { font: 'helvetica', fontSize: 9.5, cellPadding: 2.5, lineColor: [90, 90, 90], lineWidth: .25, textColor: 20, overflow: 'linebreak' },
+    headStyles: { fillColor: [225, 228, 235], textColor: 10, halign: 'center', fontStyle: 'bold' },
+    columnStyles: { 0: { cellWidth: 14 }, 1: { cellWidth: 34 }, 3: { cellWidth: 22 } },
+    rowPageBreak: 'avoid',
+    didDrawCell: function (d) {
+      if (d.section === 'body' && d.cell.raw && d.cell.raw._check) {
+        var cx = d.cell.x + d.cell.width / 2, cy = d.cell.y + d.cell.height / 2;
+        doc.setDrawColor(20); doc.setLineWidth(.55); doc.line(cx - 2.6, cy + .2, cx - .9, cy + 2.2); doc.line(cx - .9, cy + 2.2, cx + 2.8, cy - 2.6);
+        doc.setLineWidth(.25);
+      }
+    },
+    didDrawPage: function (d) {
+      if (d.pageNumber > 1) { doc.setFont('helvetica', 'italic'); doc.setFontSize(8.5); doc.setTextColor(90); doc.text('Catatan proses bimbingan: ' + pdfTxt(m.nama) + ', NPM ' + pdfTxt(m.npm), M, 11); doc.setTextColor(0); }
+    }
+  });
+  var yy = doc.lastAutoTable.finalY + 10, need = 58;
+  if (yy + need > H - 14) { doc.addPage(); yy = 24; }
+  var bx = W - M - 75;
+  doc.setFont('helvetica', 'normal'); doc.setFontSize(11);
+  doc.text(pdfTxt(m.kota) + ', ' + pdfTxt(m.tanggal), bx, yy); doc.text('Dosen Pembimbing,', bx, yy + 6);
+  var sy = yy + 9, sh = 24;
+  if (ttd) {
+    try { var tp = doc.getImageProperties(ttd), tw2 = sh * tp.width / tp.height; if (tw2 > 60) { tw2 = 60; } var th2 = tw2 * tp.height / tp.width; doc.addImage(ttd, bx, sy + (sh - th2) / 2, tw2, th2); } catch (e) {}
+  }
+  doc.setFont('helvetica', 'bold'); doc.text(pdfTxt(m.signName), bx, sy + sh + 6);
+  /* nomor halaman */
+  var n = doc.getNumberOfPages();
+  for (var i = 1; i <= n; i++) { doc.setPage(i); doc.setFont('helvetica', 'normal'); doc.setFontSize(8.5); doc.setTextColor(110); doc.text('Halaman ' + i + ' dari ' + n, W / 2, H - 7, { align: 'center' }); }
+  return doc;
+}
+async function makeCatatan(milestone, userId) {
+  var D = await api('catatanBimbingan', { milestone: milestone, userId: userId || undefined });
+  await ensurePdfLib();
+  var doc = buildCatatanPdf(D), fn = 'Catatan-Bimbingan_' + String(D.meta.npm).replace(/\W+/g, '') + '_' + milestone.replace('acc-', '') + '.pdf';
+  window.__lastCatatan = doc;
+  doc.save(fn);
+  return { rows: D.rows.length, noLogo: !D.logo, noTtd: !D.ttd };
+}
+function catatanCard(list, uid) {
+  if (!list || !list.length) return '';
+  return '<div class="card"><h2>Catatan proses bimbingan</h2><p class="muted">Rekap seluruh catatan pembimbing dalam format PDF (siap dicetak) untuk kelengkapan berkas.</p><div class="row" style="gap:8px;flex-wrap:wrap">' +
+    list.map(function (c) { return '<button class="btn" data-act="catatan" data-ms="' + c.key + '"' + (uid ? ' data-uid="' + uid + '"' : '') + '>⬇ Unduh sampai ' + esc(c.label) + '</button>'; }).join('') + '</div></div>';
+}
+function titleSuggestHtml(rd) {
+  if (!rd.titleSuggest || !rd.titleSuggest.length) return '';
+  return '<div class="note"><small>Saran judul alternatif (berdasarkan penelusuran literatur; bahan pertimbangan, bukan keputusan)</small>' + rd.titleSuggest.map(function (x, i) {
+    return '<div class="sg"><b>' + (i + 1) + '. ' + esc(x.judul) + '</b><p>' + esc(x.alasan) + '</p>' +
+      (x.refs && x.refs.length ? '<small>Rujukan: ' + x.refs.map(function (r) { return esc(r.title) + ' (' + esc(r.year) + (r.venue ? ', ' + esc(r.venue) : '') + (r.doi ? ', doi:' + esc(r.doi) : '') + ')'; }).join('; ') + '</small>' : '') + '</div>';
+  }).join('') + '</div>';
+}
+function aiExtraHtml(ai) {
+  var h = '';
+  if (ai.penilaian_revisi_sebelumnya) h += '<div class="sub"><b>Penilaian terhadap revisi sebelumnya</b><span style="font-size:.9rem">' + esc(ai.penilaian_revisi_sebelumnya) + '</span></div>';
+  if (ai.status_catatan_sebelumnya && ai.status_catatan_sebelumnya.length) {
+    var lab = { sudah: 'Sudah', sebagian: 'Sebagian', belum: 'Belum' };
+    h += '<div class="sub"><b>Status catatan sebelumnya</b><ul>' + ai.status_catatan_sebelumnya.map(function (x) {
+      return '<li>[' + esc(lab[x.status] || x.status) + '] ' + esc(x.butir) + (x.bukti ? ' <span class="muted">(' + esc(x.bukti) + ')</span>' : '') + '</li>'; }).join('') + '</ul></div>';
+  }
+  var r = ai.referensi;
+  if (r && !r.skipped) {
+    h += '<div class="sub"><b>Pemeriksaan daftar pustaka (Crossref dan OpenAlex)</b><span style="font-size:.9rem">' + r.total + ' entri' +
+      (r.online ? ': ditemukan ' + r.ditemukan + ', perlu dicek ' + r.periksa + ', tidak ditemukan ' + r.tidakDitemukan + '. "Tidak ditemukan" berarti tidak ada di dua basis data itu (bisa buku, laporan, atau sumber lokal), bukan otomatis palsu.' : '. Pencocokan daring gagal saat itu.') + '</span>';
+    if (r.bermasalah && r.bermasalah.length) h += '<ul>' + r.bermasalah.map(function (x) { return '<li>[' + esc(x.hasil) + '] ' + esc(x.entri) + (x.cocok ? '<br><span class="muted">kandidat: ' + esc(x.cocok) + '</span>' : '') + '</li>'; }).join('') + '</ul>';
+    if (r.kutipanTanpaDaftar && r.kutipanTanpaDaftar.length) h += '<p style="font-size:.88rem;margin:6px 0 0">Dikutip di teks tetapi tidak ada di daftar pustaka: ' + esc(r.kutipanTanpaDaftar.join('; ')) + '</p>';
+    if (r.daftarTanpaKutipan && r.daftarTanpaKutipan.length) h += '<p style="font-size:.88rem;margin:6px 0 0">Ada di daftar pustaka tetapi tidak terlihat dikutip: ' + esc(r.daftarTanpaKutipan.slice(0, 8).join(' || ')) + '</p>';
+    h += '</div>';
+  }
+  var ia = ai.indikasi_ai;
+  if (ia && ia.tingkat && ia.tingkat !== 'tidak ada') h += '<div class="sub"><b>Indikasi tulisan AI: ' + esc(ia.tingkat) + ' <span class="muted">(dugaan, hanya untuk dosen; konfirmasi lewat tanya jawab langsung)</span></b><span style="font-size:.9rem">' + esc(ia.alasan) + '</span></div>';
+  return h;
+}
+function remindModal(uid) {
+  var d = S.detail, rm = d.remind, p = d.profile;
+  openModal('<div class="card mdbox"><h2 style="margin:0">Kirim pengingat ke ' + esc(p.nama) + '</h2><p class="muted">Tahap saat ini menunggu mahasiswa' + (rm.idleDays ? ' selama ' + rm.idleDays + ' hari' : '') + '. Sunting teks bila perlu.' +
+    (rm.remindAt ? ' Pengingat terakhir: ' + esc(fmt(rm.remindAt)) + ' (' + rm.count + ' kali).' : '') + '</p>' +
+    '<textarea class="inp" id="remtxt">' + esc(rm.text) + '</textarea>' +
+    '<div class="row" style="gap:8px;flex-wrap:wrap;justify-content:flex-end;margin-top:12px"><button class="btn" data-act="mdClose">Batal</button>' +
+    '<button class="btn" data-act="remindSend" data-ch="email" data-id="' + uid + '">Kirim lewat email</button>' +
+    '<button class="btn wa" data-act="remindSend" data-ch="wa" data-id="' + uid + '">Buka WhatsApp</button></div></div>');
+}
+function assetModal(st) {
+  openModal('<div class="card mdbox"><h2 style="margin:0">Pengaturan dokumen</h2><p class="muted">Logo dan tanda tangan dipakai pada PDF Catatan Proses Bimbingan. Format PNG atau JPG, maksimal 1,5 MB. Tanda tangan paling baik PNG berlatar transparan.</p>' +
+    '<label class="f">Logo UMB ' + (st.logo ? '<span class="tag g">tersimpan</span>' : '<span class="tag r">belum ada</span>') + '<input class="inp" type="file" accept="image/png,image/jpeg" data-chg="asset" data-kind="logo"></label>' +
+    '<label class="f">Tanda tangan dosen ' + (st.ttd ? '<span class="tag g">tersimpan</span>' : '<span class="tag r">belum ada</span>') + '<input class="inp" type="file" accept="image/png,image/jpeg" data-chg="asset" data-kind="ttd"></label>' +
+    '<div class="row" style="justify-content:flex-end;margin-top:12px"><button class="btn primary" data-act="mdClose">Tutup</button></div></div>');
+}
+
 var ACT = {
   go: async function (t) {
     var v = t.dataset.v; S.view = v;
@@ -1173,6 +1328,25 @@ var ACT = {
   lc: function (t) { S.lc = t.dataset.c; render(); },
   toDeposit: function () { S.view = 'deposit'; render(); window.scrollTo(0, 0); },
   mdClose: function () { closeModal(); },
+  catatan: function (t) {
+    return guard(async function () {
+      var r = await makeCatatan(t.dataset.ms, t.dataset.uid);
+      toast(r.noLogo || r.noTtd ? 'PDF diunduh, tetapi ' + (r.noLogo ? 'logo' : '') + (r.noLogo && r.noTtd ? ' dan ' : '') + (r.noTtd ? 'tanda tangan' : '') + ' belum diunggah (menu Pengaturan dokumen).' : 'PDF catatan bimbingan diunduh.', r.noLogo || r.noTtd ? 'err' : '');
+    }, 'Menyusun PDF…');
+  },
+  assets: function () { return guard(async function () { assetModal(await api('adminAssetStatus')); }, 'Memuat…'); },
+  remind: function (t) { remindModal(t.dataset.id); },
+  remindSend: function (t) {
+    var ch = t.dataset.ch, id = t.dataset.id;
+    if (ch === 'email' && !confirm('Kirim email pengingat ke mahasiswa ini sekarang?')) return;
+    return guard(async function () {
+      var r = await api('adminRemind', { userId: id, channel: ch });
+      var text = ($('#remtxt') && $('#remtxt').value.trim()) || r.text;
+      if (ch === 'wa') window.open('https://wa.me/' + String(S.detail.profile.wa).replace(/\D/g, '') + '?text=' + encodeURIComponent(text), '_blank', 'noopener');
+      closeModal(); await loadDetail(id); await loadList(); render();
+      toast(ch === 'email' ? 'Pengingat dikirim lewat email.' : 'WhatsApp dibuka dan pengingat tercatat.');
+    }, 'Memproses…');
+  },
   pwaInstall: async function () {
     if (!PWA.ev) return; PWA.ev.prompt();
     try { await PWA.ev.userChoice; } catch (e) {}
@@ -1213,7 +1387,7 @@ var ACT = {
       var tt = $('#title-' + id), inc = $('#inc-' + id).checked;
       var r = await api('decide', { submissionId: id, decision: dec, note: dec === 'revisi' || inc ? note : '', closingNote: $('#close-' + id).value, newTitle: tt ? tt.value : '', lecturerFile: lec });
       store.del('draft_' + id); await refreshAfter();
-      toast(r.mailed ? 'Terkirim dan email notifikasi dikirim.' : 'Tersimpan, tetapi email gagal dikirim (kuota?).', r.mailed ? '' : 'err');
+      toast(r.mailed ? 'Terkirim dan email notifikasi dikirim' + (r.titleSuggest ? ' beserta saran judul.' : '.') : 'Tersimpan, tetapi email gagal dikirim (kuota?).', r.mailed ? '' : 'err');
     }, 'Mengirim…');
   },
   forgot: async function () {
@@ -1228,6 +1402,15 @@ var ACT = {
 };
 
 var CHG = {
+  asset: function (el) {
+    var f = el.files[0], kind = el.dataset.kind; if (!f) return;
+    if (!/^image\/(png|jpeg)$/.test(f.type)) { el.value = ''; return toast('Gunakan gambar PNG atau JPG.', 'err'); }
+    if (f.size > 1500000) { el.value = ''; return toast('Ukuran gambar harus di bawah 1,5 MB.', 'err'); }
+    return guard(async function () {
+      await api('adminSetAsset', { kind: kind, b64: await toB64(f) });
+      assetModal(await api('adminAssetStatus')); toast(kind === 'logo' ? 'Logo tersimpan.' : 'Tanda tangan tersimpan.');
+    }, 'Mengunggah…');
+  },
   libc: function (el) { S.lf.c = el.value; render(); },
   libk: function (el) { S.lf.k = el.value; render(); },
   libs: function (el) { S.lf.s = el.value; render(); },
