@@ -326,6 +326,7 @@ button.guide{width:100%;font:inherit;text-align:left;cursor:pointer}
 @media(prefers-reduced-motion:reduce){*{animation:none!important;transition:opacity .2s!important}.btn:active,.bk:hover{transform:none}}
 @media(prefers-reduced-transparency:reduce){header.top,.tabbar{background:var(--card);backdrop-filter:none}.busy{backdrop-filter:none}}
 @media(prefers-contrast:more){.card,.stage,.pn,.rows,.strip,.bk{border-color:var(--text)}}
+.ut{width:100%;border-collapse:collapse;font-size:.84rem;margin-top:8px}.ut th,.ut td{border:1px solid var(--line);padding:7px 8px;vertical-align:top;text-align:left}.ut th{background:rgba(127,127,140,.14)}.ut td:first-child{width:30px;text-align:center}
 </style>
 </head>
 <body>
@@ -436,7 +437,7 @@ async function api(action, data, anon) {
   catch (e) { throw new Error('Tidak dapat menghubungi server. Periksa GAS_URL dan pastikan Web App di-deploy dengan akses "Anyone".'); }
   try { j = await r.json(); }
   catch (e) { throw new Error('Server mengirim respons tak terduga (kode ' + r.status + '). Deploy ulang Web App sebagai versi baru dengan akses "Anyone".'); }
-  if (!j.ok) { var e = new Error(j.error || 'Gagal.'); e.code = j.code; throw e; }
+  if (!j.ok) { var e = new Error(j.error || 'Gagal.'); e.code = j.code; e.wa = j.wa; throw e; }
   return j.data;
 }
 function clearAuth() { S.auth = null; S.me = null; S.list = null; S.detail = null; S.lib = null; S.libAll = null; S.lc = null; FC = { id: null, d: null }; store.del('bka_rt'); }
@@ -449,6 +450,8 @@ async function loadMe() {
     if (d.role === 'admin') { S.view = 'adminList'; await loadList(); try { S.libAll = await api('adminLibList'); } catch (e2) {} } else S.view = 'student';
   } catch (e) {
     if (e.code === 'UNVERIFIED') S.view = 'unverified';
+    else if (e.code === 'PENDING') { S.pendWa = e.wa || ''; clearAuth(); S.view = 'pending'; }
+    else if (e.code === 'REJECTED') { clearAuth(); S.view = 'rejected'; }
     else if (e.code === 'CLOSED') { clearAuth(); S.view = 'closed'; }
     else throw e;
   }
@@ -485,6 +488,7 @@ function miles(stages) {
   stages.forEach(function (s) {
     var acc = !!s.crucial, lab;
     if (acc) lab = /Proposal|Seminar/i.test(s.label) ? 'ACC Sempro' : /Sidang/i.test(s.label) ? 'ACC Sidang' : 'ACC Submit';
+    else if (s.group === 'Penguji') lab = 'Revisi uji';
     else if (s.group === 'Awal') lab = 'Judul';
     else if (s.group === 'Bagian Artikel') lab = 'Naskah';
     else lab = s.group;
@@ -528,11 +532,12 @@ function render() {
   JPLAY = (S._pv !== v); S._pv = v;
   if (v === 'boot') h = '<div class="mk"><div class="spin"></div></div>';
   else if (v === 'auth') h = authView();
-  else if (v === 'registered') h = msgView('✉️', 'Cek email Anda', 'Kami mengirim tautan verifikasi ke <b>' + esc(S.pendingEmail) + '</b>. Klik tautan tersebut (periksa juga folder spam), lalu kembali ke sini untuk masuk.',
-    '<button class="btn primary" data-act="toLogin">Ke halaman masuk</button> <button class="btn" data-act="resend">Kirim ulang email</button>');
+  else if (v === 'registered') h = registeredView();
+  else if (v === 'pending') h = pendingView();
+  else if (v === 'rejected') h = msgView('🚫', 'Pendaftaran tidak disetujui', 'Pendaftaran akun ini tidak disetujui dosen. Hubungi dosen bila ada kekeliruan.', '<button class="btn" data-act="toLogin">Kembali</button>');
   else if (v === 'unverified') h = msgView('✉️', 'Email belum diverifikasi', 'Klik tautan verifikasi yang kami kirim ke email Anda, lalu coba masuk lagi.',
     '<button class="btn primary" data-act="resend">Kirim ulang tautan</button> <button class="btn" data-act="logout">Kembali</button>');
-  else if (v === 'closed') h = msgView('🎓', 'Akses telah ditutup', 'Seluruh tahapan bimbingan karya ilmiah untuk akun ini telah selesai. Terima kasih dan semoga ilmunya bermanfaat.', '<button class="btn" data-act="toLogin">Kembali</button>');
+  else if (v === 'closed') h = msgView('🎓', 'Akses telah ditutup', 'Seluruh proses pada akun ini telah selesai. Bila Anda mahasiswa uji, riwayat revisi (PDF) sudah dikirim ke email Anda. Terima kasih dan semoga ilmunya bermanfaat.', '<button class="btn" data-act="toLogin">Kembali</button>');
   else if (v === 'student') h = studentView();
   else if (v === 'lib') h = libView();
   else if (v === 'deposit') h = depositView();
@@ -561,24 +566,15 @@ function authView() {
     '<label class="f">Password<input class="inp" name="password" type="password" autocomplete="current-password" required></label>' +
     '<button class="btn primary block" style="margin-top:18px">Masuk</button>' +
     '<p style="text-align:center;margin:14px 0 0"><button type="button" class="lnk" data-act="forgot">Lupa password?</button></p></form>';
-  else form = '<form class="card" data-form="register" autocomplete="on">' + seg +
-    '<h2 style="margin:16px 0 0">Buat akun bimbingan</h2>' +
-    '<label class="f">Nama lengkap<input class="inp" name="nama" required minlength="3" maxlength="100" autocomplete="name"></label>' +
-    '<div class="grid2"><label class="f">NPM<input class="inp" name="npm" required maxlength="25" inputmode="numeric"></label>' +
-    '<label class="f">Tanggal lahir<input class="inp" name="tglLahir" type="date" required></label></div>' +
-    '<div class="grid2"><label class="f">Jenjang<select class="inp" name="jenjang" data-chg="jenjang" required><option value="">Pilih</option><option>S1</option><option>S2</option></select></label>' +
-    '<label class="f">Konsentrasi<select class="inp" name="konsentrasi" required><option value="">Pilih</option><option>Pemasaran</option><option>MSDM</option></select></label></div>' +
-    '<label class="f">Jenis karya ilmiah<select class="inp" name="jenis" required disabled><option value="">Pilih jenjang dahulu</option></select></label>' +
-    '<label class="f">Judul tugas akhir (sementara)<textarea class="inp" name="judul" required minlength="10" maxlength="300" style="min-height:84px"></textarea></label>' +
-    '<div class="grid2"><label class="f">No. WhatsApp<input class="inp" name="wa" type="tel" required placeholder="08xxxxxxxxxx" autocomplete="tel"></label>' +
-    '<label class="f">Email<input class="inp" name="email" type="email" required autocomplete="email"></label></div>' +
-    '<label class="f">Alamat tempat tinggal<textarea class="inp" name="alamat" required minlength="5" maxlength="300" style="min-height:70px" autocomplete="street-address"></textarea></label>' +
+  else form = '<form class="card" data-form="register" autocomplete="on">' + seg + regPicker() + (S.regMode === 'penguji' ? regFieldsUji() : regFieldsBimbingan()) +
     '<div class="grid2"><label class="f">Buat password (min. 8 karakter)<input class="inp" name="password" type="password" minlength="8" required autocomplete="new-password"></label>' +
     '<label class="f">Ulangi password<input class="inp" name="password2" type="password" minlength="8" required autocomplete="new-password"></label></div>' +
     '<label class="f">Verifikasi bukan robot<span class="cap"><span class="q" id="capq">…</span><input class="inp" id="capa" inputmode="numeric" required style="margin:0" placeholder="Jawaban"><button type="button" class="btn sm" data-act="cap" aria-label="Soal baru">↻</button></span></label>' +
     '<input class="hp" name="website" tabindex="-1" autocomplete="off" aria-hidden="true">' +
-    '<label class="f" style="display:flex;gap:10px;align-items:flex-start;color:var(--text);font-weight:400"><input type="checkbox" name="consentAi" required style="margin-top:4px;width:18px;height:18px"><span>Saya menyetujui dokumen dan data saya diproses untuk keperluan bimbingan, termasuk pemeriksaan awal dengan bantuan kecerdasan buatan yang kemudian ditinjau dosen pembimbing.</span></label>' +
-    '<button class="btn primary block" style="margin-top:18px">Buat akun</button></form>';
+    '<label class="f" style="display:flex;gap:10px;align-items:flex-start;color:var(--text);font-weight:400"><input type="checkbox" name="consentAi" required style="margin-top:4px;width:18px;height:18px"><span>' +
+    (S.regMode === 'penguji' ? 'Saya menyetujui naskah dan data saya diproses untuk keperluan pengujian, termasuk pemeriksaan awal dengan bantuan kecerdasan buatan yang kemudian ditinjau dosen penguji.' : 'Saya menyetujui dokumen dan data saya diproses untuk keperluan bimbingan, termasuk pemeriksaan awal dengan bantuan kecerdasan buatan yang kemudian ditinjau dosen pembimbing.') + '</span></label>' +
+    '<p class="muted" style="font-size:.86rem;margin:12px 0 0">Setelah mendaftar, Anda wajib mengabari dosen lewat tombol WhatsApp. Akun baru aktif setelah disetujui dosen.</p>' +
+    '<button class="btn primary block" style="margin-top:14px">Daftar</button></form>';
   var guide = '<a class="guide" href="' + CONFIG.GUIDE_URL + '" download="Buku-Panduan-E-Theses-System.pdf" rel="noopener">' +
     '<span class="gi"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 5a2 2 0 0 1 2-2h12v16H6a2 2 0 0 0-2 2z"/><path d="M4 21V5"/><path d="M12 7v6m0 0-2.5-2.5M12 13l2.5-2.5"/></svg></span>' +
     '<span><b>Buku panduan penggunaan</b><small>Langkah demi langkah, format PDF</small></span><span class="gd">Unduh</span></a>';
@@ -600,7 +596,7 @@ function roundHtml(rd, admin) {
   if (rd.hasNotePdf) f += '<button class="lnk" data-act="dl" data-kind="note" data-id="' + rd.id + '">⬇ Catatan (PDF)</button>';
   if (rd.lecturerFileName) f += '<button class="lnk" data-act="dl" data-kind="lec" data-id="' + rd.id + '">⬇ Berkas dari dosen</button>';
   return '<div class="round"><div class="rhead"><b>Pengajuan ke-' + rd.version + '</b>' + tag + '<small>' + fmt(rd.submittedAt) + '</small></div><div class="rfiles">' + f + '</div>' +
-    (rd.note ? '<div class="note"><small>Catatan pembimbing</small><p>' + esc(rd.note) + '</p></div>' : '') +
+    (rd.note ? '<div class="note"><small>' + (isUji((S.me && S.me.profile) || (S.view === 'adminDetail' && S.detail && S.detail.profile)) ? 'Catatan penguji' : 'Catatan pembimbing') + '</small><p>' + esc(rd.note) + '</p></div>' : '') +
     (rd.closingNote ? '<div class="note"><small>Catatan penutup tahap</small><p>' + esc(rd.closingNote) + '</p></div>' : '') + titleSuggestHtml(rd) + '</div>';
 }
 
@@ -610,7 +606,7 @@ function studentView() {
   m.stages.forEach(function (s) { s.rounds.forEach(function (r) { subs++; if (r.decision === 'revisi') revs++; }); });
   var cur = m.stages.filter(function (s) { return s.state === 'open' || s.state === 'revision' || s.state === 'submitted'; })[0];
   var h = '<section class="hero2"><div class="hrow"><div class="hm"><small>Halo, ' + esc(p.nama) + '</small><h1>' + esc(p.judul) + '</h1>' +
-    '<div class="chips"><span class="chip">' + esc(p.jenis) + ' ' + esc(p.jenjang) + '</span><span class="chip">' + esc(p.konsentrasi) + '</span><span class="chip">NPM ' + esc(p.npm) + '</span></div></div>' +
+    '<div class="chips"><span class="chip">' + esc(p.jenis) + ' ' + esc(p.jenjang) + '</span><span class="chip">' + esc(p.konsentrasi) + '</span><span class="chip">NPM ' + esc(p.npm) + '</span>' + (isUji(p) ? '<span class="chip">Diuji: ' + esc(ujiLbl(p)) + '</span>' : '') + '</div></div>' +
     '<div class="pc"><b>' + pr.pct + '%</b><small>' + pr.done + ' dari ' + pr.total + ' tahap selesai</small></div></div>' + jalur(ms) + '</section>';
   h += strip([['Tahap selesai', pr.done, 'var(--green)', 'dari ' + pr.total + ' tahap'], ['Tahap tersisa', pr.total - pr.done, '', 'sampai selesai'], ['Pengajuan', subs, '', 'dokumen terkirim'], ['Revisi diminta', revs, revs ? 'var(--amber)' : '', 'dari dosen']]);
   if (cur) {
@@ -623,7 +619,7 @@ function studentView() {
   if (m.canFinal) h += '<div class="card"><h2>Seluruh tahapan diterima</h2><p class="muted">Unggah berkas final (PDF atau DOCX). Setelah diunggah, akses akun akan ditutup otomatis.</p>' +
     '<label class="f" style="display:flex;gap:10px;align-items:flex-start;color:var(--text);font-weight:400"><input type="checkbox" id="consentLib" checked style="margin-top:4px;width:18px;height:18px"><span>Izinkan karya saya ditampilkan di perpustakaan bimbingan (hanya dapat dilihat mahasiswa bimbingan yang memiliki akses).</span></label>' +
     '<label class="drop"><input type="file" accept=".pdf,.docx" hidden data-chg="final"><b>Pilih berkas final</b><small>PDF atau DOCX, maksimal ' + m.config.maxMb + ' MB</small></label></div>';
-  h += catatanCard(m.catatan, '');
+  h += catatanCard(m.catatan, '') + jurnalCard();
   return h + timeline(m.stages, false);
 }
 
@@ -901,7 +897,7 @@ function adminJalur(L) {
   var order = ['Judul', 'Bab 1', 'Bab 2', 'Bab 3', 'ACC Sempro', 'Bab 4', 'Bab 5', 'ACC Sidang', 'Berkas final', 'Selesai'], c = {};
   order.forEach(function (k) { c[k] = 0; });
   var art = { n: 0, acc: 0 };
-  L.forEach(function (u) { var p = posOf(u); if (p === 'Artikel naskah') art.n++; else if (p === 'Artikel ACC') art.acc++; else c[p]++; });
+  L.forEach(function (u) { if (u.tipe === 'penguji') return; var p = posOf(u); if (p === 'Artikel naskah') art.n++; else if (p === 'Artikel ACC') art.acc++; else c[p]++; });
   var firstCur = -1;
   var h = '<div class="jlw"><ol class="jl on-light' + (JPLAY ? ' play' : '') + '">' + order.map(function (k, i) {
     var n = c[k], acc = /^ACC/.test(k), fin = k === 'Selesai';
@@ -919,17 +915,19 @@ function adminListView() {
   var by = function (key, val) { var t = L.filter(function (u) { return u[key] === val; }); return { t: t.length, d: t.filter(function (u) { return u.status === 'closed'; }).length }; };
   var mx = Math.max(1, by('jenis', 'Skripsi').t, by('jenis', 'Tesis').t, by('jenis', 'Artikel').t);
   var mk = Math.max(1, by('konsentrasi', 'Pemasaran').t, by('konsentrasi', 'MSDM').t);
-  var idleN = L.filter(function (u) { return u.idle; }).length;
+  var idleN = L.filter(function (u) { return u.idle; }).length, ujN = L.filter(function (u) { return u.tipe === 'penguji'; }).length, pendN = L.filter(function (u) { return u.approval === 'pending'; }).length;
   var rows = L.filter(function (u) {
     if (S.flt === 'wait' && !u.waiting) return false;
     if (S.flt === 'active' && u.status === 'closed') return false;
     if (S.flt === 'done' && u.status !== 'closed') return false;
     if (S.flt === 'idle' && !u.idle) return false;
+    if (S.flt === 'uji' && u.tipe !== 'penguji') return false;
+    if (S.flt === 'pend' && u.approval !== 'pending') return false;
     return !q || (u.nama + ' ' + u.npm + ' ' + u.judul).toLowerCase().indexOf(q) >= 0;
   }).sort(function (a, b) { return (b.waiting - a.waiting) || String(a.nama).localeCompare(b.nama); });
-  var fl = [['all', 'Semua'], ['wait', 'Perlu review'], ['idle', 'Tanpa progres (' + idleN + ')'], ['active', 'Berproses'], ['done', 'Selesai']].map(function (f) { return '<button class="' + (S.flt === f[0] ? 'on' : '') + '" data-act="flt" data-f="' + f[0] + '">' + f[1] + '</button>'; }).join('');
-  var h = '<div class="pg"><h1>Dashboard pembimbing</h1><p>' + esc(today()) + '</p><button class="btn sm" data-act="assets">Pengaturan dokumen</button></div>' +
-    strip([['Seluruh mahasiswa', L.length, '', unv ? unv + ' belum verifikasi email' : 'semua terverifikasi'], ['Berproses', run, 'var(--accent)', 'sedang menyusun'], ['Perlu review', wait.length, wait.length ? 'var(--amber)' : '', 'menunggu catatan Anda'], ['Selesai', done.length, 'var(--green)', 'akun sudah ditutup']]) +
+  var fl = [['all', 'Semua'], ['wait', 'Perlu review'], ['idle', 'Tanpa progres (' + idleN + ')'], ['pend', 'Menunggu persetujuan (' + pendN + ')'], ['uji', 'Diuji (' + ujN + ')'], ['active', 'Berproses'], ['done', 'Selesai']].map(function (f) { return '<button class="' + (S.flt === f[0] ? 'on' : '') + '" data-act="flt" data-f="' + f[0] + '">' + f[1] + '</button>'; }).join('');
+  var h = '<div class="pg"><h1>Dashboard pembimbing</h1><p>' + esc(today()) + '</p><button class="btn sm" data-act="assets">Pengaturan dokumen</button> <button class="btn sm" data-act="jrAdmin">Basis data jurnal</button></div>' +
+    pendPanel(L) + strip([['Seluruh mahasiswa', L.length, '', unv ? unv + ' belum verifikasi email' : 'semua terverifikasi'], ['Berproses', run, 'var(--accent)', 'sedang menyusun'], ['Perlu review', wait.length, wait.length ? 'var(--amber)' : '', 'menunggu catatan Anda'], ['Selesai', done.length, 'var(--green)', 'akun sudah ditutup']]) +
     '<div class="pn"><div class="row"><h3>Status bimbingan</h3><small class="sp"></small><small>' + L.length + ' mahasiswa</small></div>' +
     '<div class="sbar" role="img" aria-label="Selesai ' + done.length + ', perlu review ' + wait.length + ', berproses ' + run + '">' +
     '<i style="width:' + pct(done.length) + '%;background:var(--green)"></i><i style="width:' + pct(wait.length) + '%;background:var(--amber)"></i><i style="width:' + pct(run) + '%;background:var(--accent)"></i></div>' +
@@ -942,11 +940,11 @@ function adminListView() {
     '<div class="tools"><input class="inp" placeholder="Cari nama, NPM, atau judul" value="' + esc(S.q) + '" data-inp="q" aria-label="Cari mahasiswa"><div class="filters">' + '<div class="seg">' + fl + '</div></div></div>';
   if (!rows.length) return h + '<div class="card mk"><p class="muted" style="margin:0">' + (L.length ? 'Tidak ada mahasiswa yang cocok dengan filter.' : 'Belum ada mahasiswa terdaftar.') + '</p></div>';
   return h + '<div class="rows">' + rows.map(function (u) {
-    var st = u.status === 'closed' ? '<span class="tag g">Selesai</span>' : u.waiting ? '<span class="tag y"><span class="pulse"></span>Perlu review</span>' : '<span class="tag b">Berproses</span>';
+    var st = u.approval === 'pending' ? '<span class="tag y">Menunggu persetujuan</span>' : u.approval === 'rejected' ? '<span class="tag r">Ditolak</span>' : u.status === 'closed' ? '<span class="tag g">Selesai</span>' : u.waiting ? '<span class="tag y"><span class="pulse"></span>Perlu review</span>' : '<span class="tag b">Berproses</span>';
     return '<button class="rw ' + (u.status === 'closed' ? 'fin' : '') + '" data-act="open" data-id="' + u.id + '">' + avatar(u.nama) +
       '<div class="nm"><b>' + esc(u.nama) + '</b><small>' + esc(u.npm) + ', ' + esc(u.jenis) + ' ' + esc(u.jenjang) + ' ' + esc(u.konsentrasi) + '</small></div>' +
       '<div class="pr"><small><span>' + esc(u.currentLabel) + '</span><b>' + u.progress.pct + '%</b></small><div class="bar"><i style="width:' + u.progress.pct + '%"></i></div></div>' +
-      '<div class="tg">' + st + (u.idle ? ' <span class="tag idle">Tanpa progres ' + u.idleDays + ' hari</span>' : '') + (u.verified !== 'Y' ? ' <span class="tag r">Belum verifikasi</span>' : '') + '</div></button>';
+      '<div class="tg">' + st + (u.tipe === 'penguji' ? ' <span class="tag">Uji ' + (u.siklus === 'sidang' ? 'sidang' : 'sempro') + '</span>' : '') + (u.idle ? ' <span class="tag idle">Tanpa progres ' + u.idleDays + ' hari</span>' : '') + (u.verified !== 'Y' ? ' <span class="tag r">Belum verifikasi</span>' : '') + '</div></button>';
   }).join('') + '</div>';
 }
 
@@ -954,13 +952,15 @@ function adminDetailView() {
   var d = S.detail, p = d.profile, ms = miles(d.stages);
   var h = '<div style="padding:18px 0 0"><button class="btn sm ghost" data-act="back">‹ Daftar mahasiswa</button></div>' +
     '<section class="hero2" style="margin-top:12px"><div class="hrow"><div class="hm"><small>' + esc(p.nama) + ', NPM ' + esc(p.npm) + '</small><h1>' + esc(p.judul) + '</h1>' +
-    '<div class="chips"><span class="chip">' + esc(p.jenis) + ' ' + esc(p.jenjang) + '</span><span class="chip">' + esc(p.konsentrasi) + '</span><span class="chip">' + (p.status === 'closed' ? 'Akun ditutup' : 'Akun aktif') + '</span></div>' +
+    '<div class="chips"><span class="chip">' + esc(p.jenis) + ' ' + esc(p.jenjang) + '</span><span class="chip">' + esc(p.konsentrasi) + '</span><span class="chip">' + (p.status === 'closed' ? 'Akun ditutup' : p.approval === 'pending' ? 'Menunggu persetujuan' : 'Akun aktif') + '</span>' + (isUji(p) ? '<span class="chip">Diuji: ' + esc(ujiLbl(p)) + '</span>' : '') + '</div>' +
     '<div class="acts"><a class="btn sm wa" target="_blank" rel="noopener" href="https://wa.me/' + esc(p.wa) + '">WhatsApp</a><a class="btn sm" href="mailto:' + esc(p.email) + '">Email</a>' +
+    (p.approval === 'pending' ? '<button class="btn sm good" data-act="approve" data-dec="approve" data-id="' + p.id + '">Setujui pendaftar</button><button class="btn sm warn" data-act="approve" data-dec="reject" data-id="' + p.id + '">Tolak</button>' : '') +
+    (p.hasRiwayat ? '<button class="btn sm good" data-act="dl" data-kind="riwayat" data-id="' + p.id + '">Unduh riwayat revisi (PDF)</button>' : '') +
     (p.verified !== 'Y' ? '<button class="btn sm warn" data-act="verify" data-id="' + p.id + '">Verifikasi manual</button>' : '') +
     (p.hasFinal ? '<button class="btn sm good" data-act="dl" data-kind="final" data-id="' + p.id + '">Unduh berkas final</button>' : '') +
     (d.remind && d.remind.ball === 'mahasiswa' ? '<button class="btn sm ' + (d.remind.idle ? 'warn' : '') + '" data-act="remind" data-id="' + p.id + '">Ingatkan mahasiswa' + (d.remind.idleDays ? ' (' + d.remind.idleDays + ' hari)' : '') + '</button>' : '') + '</div></div>' +
     '<div class="pc"><b>' + d.progress.pct + '%</b><small>' + d.progress.done + ' dari ' + d.progress.total + ' tahap</small></div></div>' + jalur(ms) + '</section>' +
-    '<div class="card"><small>Email ' + esc(p.email) + ', WA ' + esc(p.wa) + '<br>Tanggal lahir ' + esc(p.tglLahir) + '<br>Alamat ' + esc(p.alamat) + '<br>' +
+    '<div class="card"><small>Email ' + esc(p.email) + ', WA ' + esc(p.wa) + (p.tglLahir ? '<br>Tanggal lahir ' + esc(p.tglLahir) : '') + (p.alamat ? '<br>Alamat ' + esc(p.alamat) : '') + (p.jurnalTarget ? '<br>Jurnal tujuan: ' + esc(p.jurnalTarget) : '') + (p.waClickAt ? '<br>Tombol WA diklik ' + esc(fmt(p.waClickAt)) : '') + '<br>' +
     (p.status === 'closed' ? 'Akun ditutup ' + fmt(p.closedAt) + '. ' : '') + 'Perpustakaan: ' + (p.consentLibrary === 'Y' ? 'diizinkan' : p.consentLibrary === 'N' ? 'tidak diizinkan' : 'belum ditentukan') + '</small></div>';
   return h + catatanCard(d.catatan, p.id) + timeline(d.stages, true);
 }
@@ -989,7 +989,7 @@ function timeline(stages, admin) {
       body += '<div class="banner"><b>Dokumen terkirim.</b><p class="muted" style="margin:4px 0 10px;font-size:.9rem">Kabari dosen agar segera diperiksa.</p>' +
         '<a class="btn wa" target="_blank" rel="noopener" href="' + waLink(s, last.version) + '">Kirim WhatsApp ke dosen</a></div>';
     }
-    if (admin && s.state === 'submitted') body += adminPanel(s, s.rounds[s.rounds.length - 1]);
+    if (admin && s.state === 'submitted') body += isUji(S.detail.profile) ? ujiPanel(s, s.rounds[s.rounds.length - 1]) : adminPanel(s, s.rounds[s.rounds.length - 1]);
     h += '<div class="stage st-' + s.state + (s.crucial ? ' crucial' : '') + (isOpen ? ' openb' : '') + '" data-k="' + s.key + '">' +
       '<button class="srow" data-act="toggle" data-key="' + s.key + '" aria-expanded="' + isOpen + '"><span class="sic">' + IC[st[0]] + '</span>' +
       '<span class="stxt"><b>' + esc(s.label) + '</b><small>' + st[1] + (s.rounds.length ? ' · ' + s.rounds.length + ' pengajuan' : '') + '</small></span><span class="chev">›</span></button>' +
@@ -999,7 +999,8 @@ function timeline(stages, admin) {
 }
 
 function waLink(stage, version) {
-  var p = S.me.profile, t = 'Assalamualaikum Pak, saya ' + p.nama + ' mahasiswa bimbingan bapak dengan judul ' + p.jenis.toLowerCase() + ' "' + p.judul + '". Mengirimkan ' +
+  var p = S.me.profile, t = isUji(p) ? 'Assalamualaikum Pak, saya ' + p.nama + ' mahasiswa yang akan bapak uji (' + ujiLbl(p) + ') dengan judul ' + p.jenis.toLowerCase() + ' "' + p.judul + '". Mengirimkan ' + (version > 1 ? 'revisi ke ' : 'naskah ') + stage.label + '. Mohon dicek.'
+    : 'Assalamualaikum Pak, saya ' + p.nama + ' mahasiswa bimbingan bapak dengan judul ' + p.jenis.toLowerCase() + ' "' + p.judul + '". Mengirimkan ' +
     (version > 1 ? 'revisi ke ' : 'pengajuan ') + stage.label + '. Mohon dicek.';
   return 'https://wa.me/' + S.me.config.adminWa + '?text=' + encodeURIComponent(t);
 }
@@ -1255,7 +1256,352 @@ function assetModal(st) {
     '<div class="row" style="justify-content:flex-end;margin-top:12px"><button class="btn primary" data-act="mdClose">Tutup</button></div></div>');
 }
 
+/* ------------------------------ Jurnal hub ------------------------------ */
+var USD_IDR = 16000;
+function jrRupiah(usd) { return 'Rp' + (Math.round(usd * USD_IDR / 10000) / 100).toLocaleString('id-ID') + ' juta'; }
+function jurnalCard() {
+  return '<div class="card"><h2>Rekomendasi jurnal</h2><p class="muted">Temukan jurnal yang cocok dengan judul penelitian Anda, lengkap dengan indeks (Scopus, SINTA), biaya penerbitan, dan perkiraan waktu terbit.</p>' +
+    '<button class="btn primary" data-act="jurnalOpen">Cari jurnal untuk judul saya</button></div>';
+}
+function jurnalModal() {
+  var sel = function (id, opts) { return '<select class="inp" id="' + id + '">' + opts.map(function (o) { return '<option value="' + o[0] + '">' + o[1] + '</option>'; }).join('') + '</select>'; };
+  openModal('<div class="card mdbox" style="max-width:780px"><h2 style="margin:0">Rekomendasi jurnal</h2>' +
+    '<p class="muted">Data bersumber dari Scimago (peringkat SJR Scopus), DOAJ, dan daftar SINTA yang dimasukkan dosen. Selalu cek situs resmi jurnal sebelum mengirim naskah.</p>' +
+    '<div class="grid2"><label class="f">Indeks' + sel('jr_indeks', [['semua', 'Semua'], ['scopus', 'Scopus (semua kuartil)'], ['q12', 'Scopus Q1 atau Q2'], ['sinta', 'SINTA 1 sampai 6'], ['sinta12', 'SINTA 1 atau 2'], ['doaj', 'DOAJ']]) + '</label>' +
+    '<label class="f">Fokus' + sel('jr_fokus', [['semua', 'Nasional dan internasional'], ['nasional', 'Nasional'], ['internasional', 'Internasional']]) + '</label>' +
+    '<label class="f">Biaya' + sel('jr_apc', [['semua', 'Semua'], ['gratis', 'Gratis (tanpa APC)'], ['maks', 'Batas biaya']]) + '</label>' +
+    '<label class="f">Batas biaya (juta rupiah)<input class="inp" id="jr_maks" type="number" min="0" step="0.5" placeholder="mis. 3"></label></div>' +
+    '<label class="f">Kata pencarian (opsional, kosongkan agar sesuai judul Anda)<input class="inp" id="jr_q" maxlength="120" placeholder="mis. consumer behavior, halal"></label>' +
+    '<div class="row" style="justify-content:flex-end;gap:8px;margin:12px 0"><button class="btn" data-act="mdClose">Tutup</button><button class="btn primary" data-act="jurnalGo">Cari rekomendasi</button></div>' +
+    '<div id="jrOut"></div></div>');
+}
+function jrBadges(j) {
+  var b = [];
+  if (j.scopus) b.push('<span class="tag g">Scopus ' + esc(j.q || '') + (j.sjr ? ' · SJR ' + esc(j.sjr) : '') + '</span>');
+  if (j.sinta) b.push('<span class="tag g">SINTA ' + esc(j.sinta) + '</span>');
+  if (j.doaj) b.push('<span class="tag">DOAJ</span>');
+  if (!b.length) b.push('<span class="tag">Indeks belum tercatat</span>');
+  return b.join(' ');
+}
+function jrItem(j, i) {
+  var a = j.apc, apc = a.status === 'gratis' ? 'Gratis (tanpa APC)' : a.status === 'berbayar' ? esc(a.jumlah || '') + ' ' + esc(a.mata || '') + (a.usd ? ' (kisaran ' + jrRupiah(+a.usd) + ')' : '') : 'Belum ada data biaya';
+  var wk = j.minggu ? '± ' + esc(j.minggu) + ' minggu (laporan pengelola ke DOAJ)' : 'Belum ada data';
+  var cocok = j.cocok ? '<span class="tag ' + (j.cocok === 'tinggi' ? 'g' : j.cocok === 'sedang' ? 'a' : '') + '">Kecocokan topik: ' + esc(j.cocok) + '</span>' : '';
+  return '<div class="sg"><b>' + (i + 1) + '. ' + (j.url ? '<a href="' + esc(j.url) + '" target="_blank" rel="noopener">' + esc(j.nama) + '</a>' : esc(j.nama)) + '</b>' +
+    '<small>' + esc(j.penerbit || '') + (j.negara ? ' · ' + esc(j.negara) : '') + (j.issn ? ' · ISSN ' + esc(j.issn) : '') + '</small>' +
+    '<div style="margin-top:6px;display:flex;gap:6px;flex-wrap:wrap">' + jrBadges(j) + ' ' + cocok + '</div>' +
+    (j.alasan ? '<p>' + esc(j.alasan) + '</p>' : '') +
+    '<p style="font-size:.88rem"><b>Biaya:</b> ' + apc + '<br><b>Waktu terbit:</b> ' + wk + (j.kategori ? '<br><b>Bidang:</b> ' + esc(j.kategori) : '') + '</p></div>';
+}
+function jrResult(d) {
+  var m = d.meta || {}, h = '';
+  if (m.kataKunci && m.kataKunci.length) h += '<p class="muted" style="font-size:.85rem">Kata kunci yang dipakai: ' + m.kataKunci.map(esc).join(', ') + '</p>';
+  if (!d.hasil.length) return h + '<p>' + esc(m.catatan || 'Tidak ada hasil.') + '</p>';
+  h += d.hasil.map(jrItem).join('');
+  if (m.catatan) h += '<p style="margin-top:10px">' + esc(m.catatan) + '</p>';
+  h += '<p class="muted" style="font-size:.82rem;margin-top:10px">Data tahun ' + esc(m.tahun || '-') + ' dari ' + m.jumlahDb + ' jurnal. ' + (m.ai ? 'Urutan dipilih Claude dari kandidat basis data berdasarkan nama dan kategori jurnal, bukan dari isi aims and scope.' : 'Urutan berdasarkan kecocokan kata kunci dan kualitas indeks.') +
+    ' Status indeks Scopus dan SINTA dapat berubah. Periksa langsung situs resmi jurnal, pedoman penulis, dan biaya terbaru sebelum mengirim.</p>';
+  return h;
+}
+
+/* --- impor basis data (dosen): berkas dibaca dan digabung di peramban --- */
+function parseCSV(text) {
+  if (text.charCodeAt(0) === 0xFEFF) text = text.slice(1);
+  var first = text.slice(0, text.indexOf('\n') > 0 ? text.indexOf('\n') : 2000), d = (first.split(';').length > first.split(',').length) ? ';' : ',';
+  var rows = [], row = [], cur = '', q = false, i, c, n = text.length;
+  for (i = 0; i < n; i++) {
+    c = text[i];
+    if (q) { if (c === '"') { if (text[i + 1] === '"') { cur += '"'; i++; } else q = false; } else cur += c; }
+    else if (c === '"') q = true;
+    else if (c === d) { row.push(cur); cur = ''; }
+    else if (c === '\n') { row.push(cur); rows.push(row); row = []; cur = ''; }
+    else if (c !== '\r') cur += c;
+  }
+  if (cur !== '' || row.length) { row.push(cur); rows.push(row); }
+  return rows;
+}
+function csvObjs(text) {
+  var rows = parseCSV(text); if (!rows.length) return [];
+  var head = rows[0].map(function (h) { return h.trim(); });
+  return rows.slice(1).filter(function (r) { return r.length > 2 || (r.length > 1 && r[1]); }).map(function (r) { var o = {}; head.forEach(function (h, i) { o[h] = (r[i] || '').trim(); }); return o; });
+}
+function colOf(o, re) { var k = Object.keys(o).filter(function (h) { return re.test(h); })[0]; return k ? o[k] : ''; }
+function issnN(s) { return String(s || '').replace(/[^0-9xX]/g, '').toUpperCase().slice(0, 8); }
+var RATES = { USD: 1, EUR: 1.08, GBP: 1.27, CHF: 1.12, AUD: 0.65, CAD: 0.73, SGD: 0.74, MYR: 0.22, IDR: 1 / 16000, JPY: 0.0067, INR: 0.012, CNY: 0.14, BRL: 0.18, PLN: 0.25, TRY: 0.03, ZAR: 0.055, NZD: 0.6, SEK: 0.095, NOK: 0.093, DKK: 0.145, KRW: 0.00072, MXN: 0.05, CZK: 0.043, HUF: 0.0027, EGP: 0.02, THB: 0.028 };
+var SC_AREAS = /Business, Management and Accounting|Economics, Econometrics and Finance|Social Sciences|Decision Sciences/i;
+var DO_SUBJ = /business|management|econom|financ|commerce|marketing|accounting|entrepreneur|tourism|hospitality|human resource|organi[sz]ation|logistic|supply chain|islamic|halal|social science/i;
+function mergeJurnal(files) {
+  var out = [], idx = {}, stat = { scimago: 0, doaj: 0, sinta: 0, sintaBaru: 0 }, yr = String(new Date().getFullYear());
+  function find(keys) { for (var i = 0; i < keys.length; i++) if (keys[i] && idx[keys[i]]) return idx[keys[i]]; return null; }
+  function reg(o, keys) { keys.forEach(function (k) { if (k) idx[k] = o; }); }
+  function blank(nama) { return { issn: '', eissn: '', nama: nama, penerbit: '', negara: '', scopus: '', q: '', sjr: '', hindex: '', kategori: '', sinta: '', doaj: '', apc: '', apcJml: '', apcMata: '', apcUsd: '', minggu: '', bidang: '', kata: '', url: '', sumber: [], tahun: '' }; }
+  (files.scimago || []).forEach(function (r) {
+    if (!/journal/i.test(colOf(r, /^type$/i) || 'journal')) return;
+    if (!SC_AREAS.test(colOf(r, /^areas$/i))) return;
+    var is = colOf(r, /^issn$/i).split(',').map(issnN).filter(Boolean), o = blank(colOf(r, /^title$/i)); if (!o.nama) return;
+    o.issn = is[0] || ''; o.eissn = is[1] || ''; o.scopus = 'Y'; var q = colOf(r, /best quartile/i); o.q = /^Q[1-4]$/.test(q) ? q : '';
+    o.sjr = colOf(r, /^sjr$/i).replace(',', '.'); o.hindex = colOf(r, /^h index$/i); o.kategori = colOf(r, /^categories$/i);
+    o.negara = colOf(r, /^country$/i); o.penerbit = colOf(r, /^publisher$/i); o.sumber.push('scimago');
+    var hk = Object.keys(r).filter(function (h) { return /Total Docs\. \((\d{4})\)/.test(h); })[0]; o.tahun = hk ? hk.match(/(\d{4})/)[1] : yr;
+    out.push(o); reg(o, is); stat.scimago++;
+  });
+  (files.doaj || []).forEach(function (r) {
+    var is = [issnN(colOf(r, /ISSN \(print/i)), issnN(colOf(r, /EISSN/i))].filter(Boolean), subj = colOf(r, /^subjects?$/i), o = find(is);
+    if (!o) { if (!DO_SUBJ.test(subj + ' ' + colOf(r, /^keywords$/i))) return; o = blank(colOf(r, /^journal title$/i)); if (!o.nama) return; o.issn = is[0] || ''; o.eissn = is[1] || ''; o.tahun = ''; out.push(o); reg(o, is); }
+    o.doaj = 'Y'; o.url = o.url || colOf(r, /^journal url$/i); o.penerbit = o.penerbit || colOf(r, /^publisher$/i); o.negara = o.negara || colOf(r, /country of publisher/i);
+    o.bidang = subj; o.kata = colOf(r, /^keywords$/i); o.minggu = (colOf(r, /average number of weeks/i).match(/\d+/) || [''])[0];
+    var has = colOf(r, /^(apc|journal has an apc)$/i).toLowerCase(), am = colOf(r, /^apc amount$/i), cur = colOf(r, /^currency$/i);
+    if (has === 'no') o.apc = 'N';
+    else if (has === 'yes') {
+      o.apc = 'Y'; var num = (am.match(/[\d.,]+/) || [''])[0].replace(/,/g, ''), mt = (am.match(/[A-Z]{3}/) || [cur])[0] || cur;
+      o.apcJml = num; o.apcMata = mt; var rate = RATES[String(mt).toUpperCase()]; o.apcUsd = (num && rate !== undefined && !isNaN(+num)) ? String(Math.round(+num * rate)) : '';
+    }
+    if (o.sumber.indexOf('doaj') < 0) o.sumber.push('doaj'); stat.doaj++;
+  });
+  (files.sinta || []).forEach(function (r) {
+    var is = [issnN(colOf(r, /^(p-?issn|issn)$/i)), issnN(colOf(r, /^e-?issn$/i))].filter(Boolean), nm = colOf(r, /^(nama|name|title|judul)/i);
+    var sv = (colOf(r, /sinta|akreditasi|peringkat|rank/i).match(/[1-6]/) || [''])[0]; if (!sv) return;
+    var o = find(is);
+    if (!o) { if (!nm) return; o = blank(nm); o.issn = is[0] || ''; o.eissn = is[1] || ''; o.negara = 'Indonesia'; o.url = colOf(r, /url|link|website/i); o.penerbit = colOf(r, /penerbit|publisher/i); out.push(o); reg(o, is); stat.sintaBaru++; }
+    o.sinta = sv; if (o.sumber.indexOf('sinta') < 0) o.sumber.push('sinta'); stat.sinta++;
+  });
+  out.forEach(function (o) { o.sumber = o.sumber.join('+'); if (!o.tahun) o.tahun = yr; });
+  return { rows: out, stat: stat };
+}
+var JRDATA = null;
+function jurnalAdminModal(st) {
+  openModal('<div class="card mdbox" style="max-width:700px"><h2 style="margin:0">Basis data jurnal</h2>' +
+    '<p class="muted">Terisi: <b>' + st.total + '</b> jurnal (Scopus ' + st.scopus + ', Q1 atau Q2 ' + st.q12 + ', SINTA ' + st.sinta + ', DOAJ ' + st.doaj + '; biaya diketahui ' + st.apc + ', waktu terbit diketahui ' + st.minggu + ')' + (st.tahun ? '. Data tahun ' + esc(st.tahun) : '') + (st.importAt ? '. Impor terakhir ' + esc(fmt(st.importAt)) : '') + '.</p>' +
+    '<p class="muted" style="font-size:.88rem">Unduh berkas resmi lalu pilih di bawah. Scimago: scimagojr.com, menu Journal Rankings, tombol Download data (CSV). DOAJ: doaj.org/csv. SINTA (opsional): CSV buatan sendiri dengan kolom issn, nama, sinta. Semua dibaca dan digabung di peramban Anda, lalu dikirim bertahap.</p>' +
+    '<label class="f">Scimago SJR (.csv)<input class="inp" type="file" id="jf_sc" accept=".csv,text/csv"></label>' +
+    '<label class="f">DOAJ (.csv)<input class="inp" type="file" id="jf_do" accept=".csv,text/csv"></label>' +
+    '<label class="f">SINTA (.csv, opsional)<input class="inp" type="file" id="jf_si" accept=".csv,text/csv"></label>' +
+    '<div class="row" style="justify-content:flex-end;gap:8px;margin:12px 0"><button class="btn" data-act="mdClose">Tutup</button><button class="btn" data-act="jrParse">Baca dan gabung</button></div>' +
+    '<div id="jrAdm"></div></div>');
+}
+async function readText(id) { var f = ($('#' + id) || {}).files && $('#' + id).files[0]; return f ? await f.text() : ''; }
+
+/* ------------------------------ Revisi 6: pendaftaran, persetujuan, mode penguji ------------------------------ */
+function waRegText(fd) {
+  var peng = S.regMode === 'penguji', t = 'Assalamualaikum Pak, saya ' + fd.nama + ' (NPM ' + fd.npm + ') baru mendaftar akun E-Theses System sebagai ';
+  if (peng) t += 'mahasiswa yang akan bapak uji pada ' + (fd.siklus === 'sidang' ? 'sidang akhir' : 'seminar proposal') + ', dengan judul "' + fd.judul + '". ';
+  else t += 'mahasiswa bimbingan bapak (' + fd.jenis + ' ' + fd.jenjang + '). ';
+  return t + 'Mohon dicek dan disetujui. Terima kasih.';
+}
+function regPicker() {
+  var on = S.regMode === 'penguji';
+  return '<p class="muted" style="margin:14px 0 6px;font-size:.9rem">Saya mendaftar sebagai:</p><div class="seg"><button type="button" class="' + (on ? '' : 'on') + '" data-act="regMode" data-m="bimbingan">Mahasiswa bimbingan</button>' +
+    '<button type="button" class="' + (on ? 'on' : '') + '" data-act="regMode" data-m="penguji">Mahasiswa yang akan diuji</button></div>';
+}
+function regFieldsUji() {
+  return '<h2 style="margin:16px 0 0">Daftar untuk diuji</h2><p class="muted" style="font-size:.9rem;margin:4px 0 0">Akun berlaku untuk satu tahap ujian saja (seminar proposal atau sidang akhir), dan ditutup otomatis setelah revisi dinyatakan selesai.</p>' +
+    '<label class="f">Nama lengkap<input class="inp" name="nama" required minlength="3" maxlength="100" autocomplete="name"></label>' +
+    '<div class="grid2"><label class="f">NPM<input class="inp" name="npm" required maxlength="25" inputmode="numeric"></label>' +
+    '<label class="f">Konsentrasi<input class="inp" name="konsentrasi" required minlength="2" maxlength="60" placeholder="mis. Pemasaran"></label></div>' +
+    '<div class="grid2"><label class="f">Jenis karya ilmiah<select class="inp" name="jenis" data-chg="ujiJenis" required><option value="">Pilih</option><option>Skripsi</option><option>Tesis</option><option>Artikel</option></select></label>' +
+    '<label class="f">Tahap yang akan diuji<select class="inp" name="siklus" required><option value="">Pilih</option><option value="sempro">Seminar Proposal</option><option value="sidang">Sidang Akhir</option></select></label></div>' +
+    '<div id="ujiJenj" hidden><label class="f">Jenjang<select class="inp" name="jenjang"><option>S1</option><option>S2</option><option>S3</option></select></label></div>' +
+    '<div id="ujiJur" hidden><label class="f">Jika artikel, akan terbit di jurnal apa?<input class="inp" name="jurnalTarget" maxlength="150" placeholder="nama jurnal tujuan"></label></div>' +
+    '<label class="f">Judul skripsi / tesis / artikel<textarea class="inp" name="judul" required minlength="10" maxlength="300" style="min-height:84px"></textarea></label>' +
+    '<div class="grid2"><label class="f">No. WhatsApp<input class="inp" name="wa" type="tel" required placeholder="08xxxxxxxxxx" autocomplete="tel"></label>' +
+    '<label class="f">Email<input class="inp" name="email" type="email" required autocomplete="email"></label></div>';
+}
+function regFieldsBimbingan() {
+  return '<h2 style="margin:16px 0 0">Buat akun bimbingan</h2>' +
+    '<label class="f">Nama lengkap<input class="inp" name="nama" required minlength="3" maxlength="100" autocomplete="name"></label>' +
+    '<div class="grid2"><label class="f">NPM<input class="inp" name="npm" required maxlength="25" inputmode="numeric"></label>' +
+    '<label class="f">Tanggal lahir<input class="inp" name="tglLahir" type="date" required></label></div>' +
+    '<div class="grid2"><label class="f">Jenjang<select class="inp" name="jenjang" data-chg="jenjang" required><option value="">Pilih</option><option>S1</option><option>S2</option></select></label>' +
+    '<label class="f">Konsentrasi<select class="inp" name="konsentrasi" required><option value="">Pilih</option><option>Pemasaran</option><option>MSDM</option></select></label></div>' +
+    '<label class="f">Jenis karya ilmiah<select class="inp" name="jenis" required disabled><option value="">Pilih jenjang dahulu</option></select></label>' +
+    '<label class="f">Judul tugas akhir (sementara)<textarea class="inp" name="judul" required minlength="10" maxlength="300" style="min-height:84px"></textarea></label>' +
+    '<div class="grid2"><label class="f">No. WhatsApp<input class="inp" name="wa" type="tel" required placeholder="08xxxxxxxxxx" autocomplete="tel"></label>' +
+    '<label class="f">Email<input class="inp" name="email" type="email" required autocomplete="email"></label></div>' +
+    '<label class="f">Alamat tempat tinggal<textarea class="inp" name="alamat" required minlength="5" maxlength="300" style="min-height:70px" autocomplete="street-address"></textarea></label>';
+}
+function registeredView() {
+  var ri = S.regInfo || {};
+  var wa = ri.adminWa ? '<a class="btn wa" target="_blank" rel="noopener" data-act="regWa" href="https://wa.me/' + esc(ri.adminWa) + '?text=' + encodeURIComponent(ri.text || '') + '">Kabari dosen lewat WhatsApp</a> ' : '';
+  return msgView('📨', 'Satu langkah lagi agar akun aktif',
+    'Pendaftaran Anda sudah masuk. Akun baru bisa dipakai setelah tiga hal ini:<br><br><b>1.</b> Klik tautan verifikasi yang kami kirim ke <b>' + esc(S.pendingEmail) + '</b> (periksa juga folder spam).<br>' +
+    '<b>2.</b> Klik tombol WhatsApp di bawah untuk mengabari dosen (wajib).<br><b>3.</b> Tunggu dosen menyetujui pendaftaran Anda. Kabar persetujuan dikirim lewat email.',
+    wa + '<button class="btn" data-act="toLogin">Ke halaman masuk</button> <button class="btn" data-act="resend">Kirim ulang email</button>');
+}
+function pendingView() {
+  var wa = S.pendWa ? '<a class="btn wa" target="_blank" rel="noopener" href="https://wa.me/' + esc(S.pendWa) + '?text=' + encodeURIComponent('Assalamualaikum Pak, saya mendaftar akun E-Theses System dan menunggu persetujuan. Mohon dicek. Terima kasih.') + '">Kabari dosen lewat WhatsApp</a> ' : '';
+  return msgView('⏳', 'Menunggu persetujuan dosen', 'Akun Anda sudah dibuat, tetapi baru dapat dipakai setelah disetujui dosen. Bila belum mengabari dosen, klik tombol WhatsApp. Anda akan menerima email saat disetujui.', wa + '<button class="btn" data-act="toLogin">Kembali</button>');
+}
+function ujiLbl(p) { return p && p.siklus === 'sidang' ? 'Sidang Akhir' : 'Seminar Proposal'; }
+function isUji(p) { return !!(p && p.tipe === 'penguji'); }
+
+function fmtWib(iso) {
+  var d = new Date(iso); if (isNaN(d)) return '';
+  try {
+    var o = {}; new Intl.DateTimeFormat('id-ID', { timeZone: 'Asia/Jakarta', day: 'numeric', month: 'long', year: 'numeric', hour: '2-digit', minute: '2-digit', hourCycle: 'h23' }).formatToParts(d).forEach(function (x) { o[x.type] = x.value; });
+    return o.day + ' ' + o.month + ' ' + o.year + ', ' + o.hour + ':' + o.minute + ' WIB';
+  } catch (e) { return String(iso); }
+}
+function fmtWibDate(iso) { var s = fmtWib(iso); return s.replace(/,.*$/, ''); }
+
+function ujMnGet(id) { try { return JSON.parse(store.get('ujm_' + id) || '[]'); } catch (e) { return []; } }
+function ujMnSet(id, a) { store.set('ujm_' + id, JSON.stringify(a)); }
+function ujOff(id) { try { return JSON.parse(store.get('ujo_' + id) || '[]'); } catch (e) { return []; } }
+function ujiPanel(s, rd) {
+  var ai = rd.ai, id = rd.id, st = rd.aiStatus || '', off = ujOff(id), mn = ujMnGet(id);
+  var stx = { pending: 'Dalam antrean, diperiksa otomatis (±5 menit)', processing: 'Sedang diperiksa…', done: 'Selesai ' + fmt(rd.aiAt), error: 'Gagal: ' + esc(rd.aiError) }[st] || 'Belum diperiksa';
+  var isRev = rd.version > 1;
+  var h = '<div style="margin-top:6px"><div class="ai"><div class="row"><b>' + (isRev ? 'Pemeriksaan revisi oleh Claude' : 'Bahan pengujian dari Claude') + '</b>' +
+    (ai ? '<span class="tag ' + (ai.rekomendasi === 'lanjut' ? 'g' : 'a') + '">' + (ai.rekomendasi === 'lanjut' ? 'Rekomendasi: dapat dinyatakan selesai' : 'Rekomendasi: revisi') + '</span>' : '') + '<small class="sp"></small></div><small>' + stx + '</small>';
+  if (ai) {
+    h += '<p class="sum">' + esc(ai.ringkasan) + '</p>';
+    if (ai.status_sebelumnya && ai.status_sebelumnya.length) {
+      var lab = { sudah: 'Sudah', sebagian: 'Sebagian', belum: 'Belum' };
+      h += '<div class="sub"><b>Tindak lanjut temuan sebelumnya</b><ul>' + ai.status_sebelumnya.map(function (x) { return '<li>[' + esc(lab[x.status] || x.status) + '] ' + esc(x.butir) + (x.bukti ? ' <span class="muted">(' + esc(x.bukti) + ')</span>' : '') + '</li>'; }).join('') + '</ul></div>';
+    }
+    h += '<div class="sub"><b>Daftar temuan dan periksa' + (isRev ? ' (butir yang masih terbuka atau baru)' : '') + '</b>';
+    if (ai.temuan && ai.temuan.length) {
+      h += '<small class="muted">Centang butir yang akan dikirim ke mahasiswa. ' + (ai.pagesOk ? 'Halaman mengikuti urutan halaman pada berkas Word.' : 'Berkas tidak menyimpan penanda halaman, kolom Halaman berisi lokasi pada naskah.') + '</small>' +
+        '<div style="overflow-x:auto"><table class="ut"><thead><tr><th></th><th>No</th><th>Temuan</th><th>Halaman</th><th>Penjelasan Temuan</th><th>Apa yang sebaiknya diperbaiki (saran)</th></tr></thead><tbody>' +
+        ai.temuan.map(function (t, i) {
+          return '<tr><td><input type="checkbox" class="ujchk" data-chg="ujchk" data-id="' + id + '" data-i="' + i + '" ' + (off.indexOf(i) < 0 ? 'checked' : '') + ' aria-label="Kirim butir ' + (i + 1) + '"></td><td>' + (i + 1) + '</td><td>' + esc(t.temuan) + '<br><span class="tag ' + (t.prioritas === 'tinggi' ? 'r' : t.prioritas === 'sedang' ? 'a' : '') + '">' + esc(t.prioritas) + '</span></td><td>' + esc(t.halaman) + '</td><td>' + esc(t.penjelasan_temuan) + '</td><td>' + esc(t.saran) + '</td></tr>';
+        }).join('') + '</tbody></table></div>';
+    } else h += '<p class="muted" style="margin:6px 0 0">Tidak ada temuan terbuka.</p>';
+    h += '</div>';
+    if (ai.pertanyaan && ai.pertanyaan.length) h += '<div class="sub"><b>Pertanyaan untuk mahasiswa (hanya untuk Anda, tidak dikirim)</b><ol style="margin:4px 0 0;padding-left:20px;font-size:.9rem;line-height:1.55">' +
+      ai.pertanyaan.map(function (q) { return '<li>' + esc(q.pertanyaan) + (q.bagian ? '<br><span class="muted">Bagian: ' + esc(q.bagian) + '</span>' : '') + (q.maksud ? '<br><span class="muted">Yang diuji: ' + esc(q.maksud) + '</span>' : '') + '</li>'; }).join('') + '</ol></div>';
+  }
+  h += '<div class="row" style="margin-top:10px">' + (rd.hasAiPdf ? '<button class="btn sm" data-act="dl" data-kind="ai" data-id="' + id + '">Unduh PDF bahan pengujian</button>' : '') +
+    '<button class="btn sm" data-act="view" data-id="' + id + '" data-name="' + esc(rd.fileName) + '">Baca naskah</button>' +
+    '<button class="btn sm" data-act="ai" data-id="' + id + '">' + (st === 'done' ? 'Periksa ulang' : st === 'error' ? 'Coba lagi' : 'Periksa sekarang') + '</button></div></div>';
+  h += '<div class="ai"><div class="row"><b>Temuan Anda sendiri</b></div><small>Hal yang Anda temukan saat membaca atau saat ujian. Ikut dikirim bersama temuan terpilih.</small>' +
+    (mn.length ? '<ul style="margin:8px 0 0;padding-left:18px;font-size:.9rem">' + mn.map(function (m, i) { return '<li>[Hal. ' + esc(m.halaman) + '] ' + esc(m.temuan) + (m.penjelasan ? ' <span class="muted">' + esc(m.penjelasan) + '</span>' : '') + (m.saran && m.saran !== '-' ? ' <em>Saran: ' + esc(m.saran) + '</em>' : '') + ' <button class="lnk" data-act="ujDel" data-id="' + id + '" data-i="' + i + '">hapus</button></li>'; }).join('') + '</ul>' : '') +
+    '<div class="grid2"><label class="f">Halaman / lokasi<input class="inp" id="ujh-' + id + '" maxlength="60" placeholder="mis. 14 atau Bab 3"></label><label class="f">Temuan<input class="inp" id="ujt-' + id + '" maxlength="500"></label></div>' +
+    '<div class="grid2"><label class="f">Penjelasan<input class="inp" id="ujp-' + id + '" maxlength="900"></label><label class="f">Saran perbaikan<input class="inp" id="ujs-' + id + '" maxlength="900"></label></div>' +
+    '<div class="row" style="margin-top:8px"><button class="btn sm" data-act="ujAdd" data-id="' + id + '">+ Tambah temuan</button></div></div>';
+  var ex = store.get('draft_ujx_' + id) || '';
+  h += '<div class="ai"><label class="f" style="margin-top:0">Catatan tambahan dari penguji (opsional, dikirim bersama daftar temuan)<textarea class="inp" id="ujx-' + id + '" data-draft="ujx_' + id + '" placeholder="mis. catatan lisan saat ujian">' + esc(ex) + '</textarea></label>' +
+    '<div class="row" style="margin-top:12px"><button class="btn warn sp" data-act="ujiRevisi" data-id="' + id + '">Kirim daftar temuan ke email mahasiswa (PDF)</button></div>' +
+    '<label class="f">Catatan penutup jika dinyatakan selesai (opsional)<input class="inp" id="ujc-' + id + '" maxlength="500" placeholder="mis. seluruh temuan telah ditindaklanjuti dengan baik"></label>' +
+    '<div class="row" style="margin-top:6px"><button class="btn good sp" data-act="ujiSelesai" data-id="' + id + '">Revisi selesai: kirim riwayat PDF dan tutup akun</button></div></div></div>';
+  return h;
+}
+
+function findRound(id) { var rd = null; ((S.detail && S.detail.stages) || []).forEach(function (s) { s.rounds.forEach(function (r) { if (r.id === id) rd = r; }); }); return rd; }
+function noteItems(note) {
+  var out = [], m, re = /^\s*(\d+)\.\s+\[Halaman ([^\]]*)\]\s+(.+)$/gm;
+  while ((m = re.exec(String(note || '')))) out.push({ halaman: m[2], temuan: m[3] });
+  return out;
+}
+
+function buildRiwayatPdf(D) {
+  var J = window.jspdf.jsPDF, doc = new J({ orientation: 'portrait', unit: 'mm', format: 'a4' });
+  var W = 210, H = 297, M = 18, y = M, p = D.p, logo = dataUrl(D.logo), ttd = dataUrl(D.ttd), tahap = ujiLbl(p);
+  doc.setTextColor(0);
+  if (logo) {
+    try { var ip = doc.getImageProperties(logo), lh = 24, lw = lh * ip.width / ip.height; if (lw > 44) { lw = 44; lh = lw * ip.height / ip.width; } doc.addImage(logo, W / 2 - lw / 2, y, lw, lh); y += lh + 4; } catch (e) { y += 2; }
+  }
+  doc.setFont('helvetica', 'bold'); doc.setFontSize(14); doc.text('UNIVERSITAS MUHAMMADIYAH BENGKULU', W / 2, y + 5, { align: 'center' });
+  doc.setLineWidth(.6); doc.line(M, y + 9, W - M, y + 9); doc.setLineWidth(.2); doc.line(M, y + 10.2, W - M, y + 10.2);
+  y += 20;
+  doc.setFontSize(12.5); var tt = 'RIWAYAT REVISI PASCA ' + tahap.toUpperCase(); doc.text(tt, W / 2, y, { align: 'center' });
+  doc.setFont('helvetica', 'normal'); doc.setFontSize(10); doc.text(pdfTxt(p.jenis + ' ' + p.jenjang + (p.jurnalTarget ? ', jurnal tujuan: ' + p.jurnalTarget : '')), W / 2, y + 5.5, { align: 'center' });
+  y += 13; doc.setFontSize(10.5);
+  function idRow(k, v) {
+    doc.setFont('helvetica', 'bold'); doc.text(k, M, y); doc.text(':', M + 26, y);
+    doc.setFont('helvetica', 'normal'); var ls = doc.splitTextToSize(pdfTxt(v), W - 2 * M - 30); doc.text(ls, M + 30, y); y += 5.3 * ls.length;
+  }
+  idRow('Nama', p.nama); idRow('NPM', p.npm); idRow('Konsentrasi', p.konsentrasi); idRow('Judul', p.judul); idRow('Tahap ujian', tahap);
+  y += 3;
+  var ev = [], n = 0;
+  D.rounds.forEach(function (rd) {
+    ev.push([++n, fmtWib(rd.submittedAt), 'Naskah ' + (rd.version > 1 ? 'revisi ' : '') + 'diunggah mahasiswa', 'Pengajuan ke-' + rd.version]);
+    if (rd.decision === 'revisi') { var k = noteItems(rd.note).length; ev.push([++n, fmtWib(rd.decisionAt), 'Daftar temuan dikirim ke mahasiswa, revisi diminta', k ? k + ' butir temuan' : 'Catatan penguji']); }
+  });
+  ev.push([++n, fmtWib(D.nowIso), 'Revisi dinyatakan selesai oleh penguji', 'Seluruh temuan telah ditindaklanjuti']);
+  doc.setFont('helvetica', 'bold'); doc.setFontSize(11); doc.text('A. Riwayat proses', M, y); y += 2;
+  doc.autoTable({ startY: y, margin: { left: M, right: M, top: 16, bottom: 16 }, theme: 'grid', head: [['No', 'Tanggal dan waktu', 'Kegiatan', 'Keterangan']], body: ev.map(function (r) { return r.map(pdfTxt); }),
+    styles: { font: 'helvetica', fontSize: 9, cellPadding: 2.2, lineColor: [90, 90, 90], lineWidth: .2, textColor: 20, overflow: 'linebreak' },
+    headStyles: { fillColor: [225, 228, 235], textColor: 10, fontStyle: 'bold', halign: 'center' }, columnStyles: { 0: { cellWidth: 10, halign: 'center' }, 1: { cellWidth: 44 }, 3: { cellWidth: 46 } }, rowPageBreak: 'avoid' });
+  y = doc.lastAutoTable.finalY + 8;
+  var tem = [], tn = 0;
+  D.rounds.forEach(function (rd) { if (rd.decision !== 'revisi') return; noteItems(rd.note).forEach(function (it) { tem.push([++tn, fmtWibDate(rd.decisionAt), it.halaman, it.temuan, 'Selesai']); }); });
+  if (tem.length) {
+    if (y > H - 50) { doc.addPage(); y = 20; }
+    doc.setFont('helvetica', 'bold'); doc.setFontSize(11); doc.text('B. Temuan yang disampaikan dan ditindaklanjuti', M, y); y += 2;
+    doc.autoTable({ startY: y, margin: { left: M, right: M, top: 16, bottom: 16 }, theme: 'grid', head: [['No', 'Disampaikan', 'Halaman', 'Temuan', 'Status']], body: tem.map(function (r) { return r.map(pdfTxt); }),
+      styles: { font: 'helvetica', fontSize: 9, cellPadding: 2.2, lineColor: [90, 90, 90], lineWidth: .2, textColor: 20, overflow: 'linebreak' },
+      headStyles: { fillColor: [225, 228, 235], textColor: 10, fontStyle: 'bold', halign: 'center' }, columnStyles: { 0: { cellWidth: 10, halign: 'center' }, 1: { cellWidth: 30 }, 2: { cellWidth: 20 }, 4: { cellWidth: 20, halign: 'center' } }, rowPageBreak: 'avoid' });
+    y = doc.lastAutoTable.finalY + 8;
+  }
+  if (D.closing) { doc.setFont('helvetica', 'italic'); doc.setFontSize(10); var cl = doc.splitTextToSize(pdfTxt(D.closing), W - 2 * M); if (y + cl.length * 5 > H - 70) { doc.addPage(); y = 20; } doc.text(cl, M, y); y += cl.length * 5 + 4; }
+  if (y + 46 > H - 14) { doc.addPage(); y = 22; }
+  var bx = W - M - 70;
+  doc.setFont('helvetica', 'normal'); doc.setFontSize(11); doc.text(pdfTxt(D.kota) + ', ' + fmtWibDate(D.nowIso), bx, y); doc.text('Dosen Penguji,', bx, y + 6);
+  var sy = y + 9, sh = 24;
+  if (ttd) { try { var tp = doc.getImageProperties(ttd), tw = sh * tp.width / tp.height; if (tw > 60) tw = 60; var th = tw * tp.height / tp.width; doc.addImage(ttd, bx, sy + (sh - th) / 2, tw, th); } catch (e) {} }
+  doc.setFont('helvetica', 'bold'); doc.text(pdfTxt(D.signName), bx, sy + sh + 6);
+  /* cap REVISI SELESAI di kiri tanda tangan */
+  doc.setDrawColor(0, 110, 60); doc.setTextColor(0, 110, 60); doc.setLineWidth(.8); doc.roundedRect(M, sy + 2, 56, 17, 2, 2);
+  doc.setFontSize(15); doc.text('REVISI SELESAI', M + 28, sy + 13.2, { align: 'center' }); doc.setTextColor(0); doc.setDrawColor(0); doc.setLineWidth(.2);
+  var nPg = doc.getNumberOfPages();
+  for (var i = 1; i <= nPg; i++) { doc.setPage(i); doc.setFont('helvetica', 'normal'); doc.setFontSize(8.5); doc.setTextColor(110); doc.text('Riwayat revisi: ' + pdfTxt(p.nama) + ', NPM ' + pdfTxt(p.npm) + '  |  Halaman ' + i + ' dari ' + nPg, W / 2, H - 8, { align: 'center' }); }
+  doc.setTextColor(0);
+  return doc;
+}
+function pendPanel(L) {
+  var P = L.filter(function (u) { return u.approval === 'pending'; }); if (!P.length) return '';
+  return '<div class="pn" style="border-color:var(--amber)"><h3>Menunggu persetujuan (' + P.length + ')</h3><small>Akun belum bisa dipakai sebelum Anda setujui.</small>' + P.map(function (u) {
+    return '<div class="row" style="padding:12px 0 0;margin-top:12px;border-top:1px solid var(--line);gap:10px;flex-wrap:wrap;align-items:flex-start"><div style="flex:1;min-width:230px"><b>' + esc(u.nama) + '</b> <small>NPM ' + esc(u.npm) + '</small><br>' +
+      '<small>' + (u.tipe === 'penguji' ? 'Mahasiswa uji (' + (u.siklus === 'sidang' ? 'Sidang Akhir' : 'Seminar Proposal') + ')' : 'Mahasiswa bimbingan') + ', ' + esc(u.jenis) + ' ' + esc(u.jenjang) + ', ' + esc(u.konsentrasi) + (u.jurnalTarget ? ', jurnal tujuan ' + esc(u.jurnalTarget) : '') + '</small><br><small>' + esc(u.judul) + '</small><br>' +
+      '<small>' + (u.waClickAt ? '<span class="tag g">sudah klik tombol WA</span>' : '<span class="tag r">belum klik tombol WA</span>') + ' ' + (u.verified === 'Y' ? '<span class="tag g">email terverifikasi</span>' : '<span class="tag a">email belum diverifikasi</span>') + '</small></div>' +
+      '<div class="row" style="gap:8px"><a class="btn sm wa" target="_blank" rel="noopener" href="https://wa.me/' + esc(u.wa) + '">WhatsApp</a><button class="btn sm good" data-act="approve" data-dec="approve" data-id="' + u.id + '">Setujui</button><button class="btn sm warn" data-act="approve" data-dec="reject" data-id="' + u.id + '">Tolak</button></div></div>';
+  }).join('') + '</div>';
+}
+
 var ACT = {
+  regMode: function (t) { S.regMode = t.dataset.m === 'penguji' ? 'penguji' : 'bimbingan'; render(); },
+  regWa: function () { var tk = S.regInfo && S.regInfo.tok; if (tk) api('regWaClick', { tok: tk }, true).catch(function () {}); },
+  approve: function (t) {
+    var id = t.dataset.id, dec = t.dataset.dec, u = (S.list || []).filter(function (x) { return x.id === id; })[0] || (S.detail && S.detail.profile && S.detail.profile.id === id ? S.detail.profile : null), reason = '';
+    if (dec === 'reject') { var rs = prompt('Alasan penolakan (opsional, dikirim ke pendaftar):'); if (rs === null) return; reason = rs; }
+    else if (!confirm('Setujui ' + (u ? u.nama : 'pendaftar ini') + '? Email pemberitahuan akan terkirim otomatis.')) return;
+    return guard(async function () {
+      var r = await api('adminApprove', { userId: id, decision: dec, reason: reason });
+      await loadList(); if (S.view === 'adminDetail') await loadDetail(S.detail.id); render();
+      toast(dec === 'approve' ? (r.mailed ? 'Pendaftar disetujui dan email dikirim.' : 'Disetujui, tetapi email gagal dikirim.') : 'Pendaftaran ditolak.');
+    }, 'Memproses…');
+  },
+  ujAdd: function (t) {
+    var id = t.dataset.id, tm = $('#ujt-' + id).value.trim(); if (tm.length < 5) return toast('Tulis temuan terlebih dahulu.', 'err');
+    var a = ujMnGet(id); a.push({ halaman: $('#ujh-' + id).value.trim() || '-', temuan: tm, penjelasan: $('#ujp-' + id).value.trim(), saran: $('#ujs-' + id).value.trim() || '-' }); ujMnSet(id, a);
+    var x = $('#ujx-' + id); if (x) store.set('draft_ujx_' + id, x.value); render();
+  },
+  ujDel: function (t) { var id = t.dataset.id, a = ujMnGet(id); a.splice(+t.dataset.i, 1); ujMnSet(id, a); var x = $('#ujx-' + id); if (x) store.set('draft_ujx_' + id, x.value); render(); },
+  ujiRevisi: function (t) {
+    var id = t.dataset.id, nm = S.detail.profile.nama, pilih = [].slice.call(document.querySelectorAll('.ujchk[data-id="' + id + '"]')).filter(function (c) { return c.checked; }).map(function (c) { return +c.dataset.i; });
+    var manual = ujMnGet(id), extra = ($('#ujx-' + id).value || '').trim();
+    if (!pilih.length && !manual.length && extra.length < 10) return toast('Pilih minimal satu temuan atau tulis catatan.', 'err');
+    if (!confirm('Kirim ' + (pilih.length + manual.length) + ' butir temuan ke ' + nm + ' sebagai PDF lewat email? Mahasiswa akan diminta merevisi.')) return;
+    return guard(async function () {
+      var r = await api('adminUjiDecide', { submissionId: id, decision: 'revisi', pilih: pilih, manual: manual, extra: extra });
+      store.del('draft_ujx_' + id); store.del('ujm_' + id); store.del('ujo_' + id); await refreshAfter();
+      toast(r.mailed ? 'Daftar temuan (PDF) dikirim ke email mahasiswa.' : 'Tersimpan, tetapi email gagal dikirim (kuota?).', r.mailed ? '' : 'err');
+    }, 'Menyusun PDF dan mengirim…');
+  },
+  ujiSelesai: function (t) {
+    var id = t.dataset.id, d = S.detail, p = d.profile;
+    if (!confirm('Nyatakan revisi ' + p.nama + ' SELESAI?\n\nPDF riwayat revisi (lengkap dengan tanda tangan Anda) dikirim ke emailnya, lalu akunnya ditutup otomatis dan tidak bisa dipakai lagi.')) return;
+    return guard(async function () {
+      await ensurePdfLib(); var A = await api('adminAssets'), nowIso = new Date().toISOString(), closing = ($('#ujc-' + id).value || '').trim();
+      var stg = d.stages[0], doc = buildRiwayatPdf({ p: p, rounds: stg.rounds, nowIso: nowIso, logo: A.logo, ttd: A.ttd, signName: A.signName, kota: A.kota, closing: closing });
+      var b64 = doc.output('datauristring').split(',')[1];
+      var r = await api('adminUjiDecide', { submissionId: id, decision: 'selesai', closingNote: closing, riwayatPdf: b64 });
+      store.del('draft_ujx_' + id); store.del('ujm_' + id); store.del('ujo_' + id);
+      doc.save('Riwayat-Revisi_' + String(p.npm).replace(/\W+/g, '') + '.pdf');
+      await refreshAfter();
+      toast((r.mailed ? 'Revisi dinyatakan selesai, PDF dikirim dan akun ditutup.' : 'Selesai dan akun ditutup, tetapi email gagal dikirim. PDF sudah diunduh ke perangkat Anda.') + (!A.logo || !A.ttd ? ' Catatan: ' + (!A.logo ? 'logo' : '') + (!A.logo && !A.ttd ? ' dan ' : '') + (!A.ttd ? 'tanda tangan' : '') + ' belum diunggah di Pengaturan dokumen.' : ''), r.mailed && A.logo && A.ttd ? '' : 'err');
+    }, 'Menyusun PDF riwayat dan menutup akun…');
+  },
   go: async function (t) {
     var v = t.dataset.v; S.view = v;
     if (v === 'lib') { S.lib = null; render(); await reloadLib(); }
@@ -1334,6 +1680,34 @@ var ACT = {
       toast(r.noLogo || r.noTtd ? 'PDF diunduh, tetapi ' + (r.noLogo ? 'logo' : '') + (r.noLogo && r.noTtd ? ' dan ' : '') + (r.noTtd ? 'tanda tangan' : '') + ' belum diunggah (menu Pengaturan dokumen).' : 'PDF catatan bimbingan diunduh.', r.noLogo || r.noTtd ? 'err' : '');
     }, 'Menyusun PDF…');
   },
+  jurnalOpen: function () { jurnalModal(); },
+  jurnalGo: function () {
+    var body = { indeks: $('#jr_indeks').value, fokus: $('#jr_fokus').value, apc: $('#jr_apc').value, q: $('#jr_q').value.trim() };
+    var mk = parseFloat($('#jr_maks').value); if (body.apc === 'maks') { if (!(mk >= 0)) return toast('Isi batas biaya dalam juta rupiah.', 'err'); body.apcMaksUsd = mk * 1000000 / USD_IDR; }
+    return guard(async function () { var d = await api('jurnalRekomendasi', body); $('#jrOut').innerHTML = jrResult(d); $('#jrOut').scrollIntoView({ behavior: 'smooth', block: 'start' }); }, 'Mencari jurnal…');
+  },
+  jrAdmin: function () { return guard(async function () { jurnalAdminModal(await api('adminJurnalStatus')); }, 'Memuat…'); },
+  jrParse: function () {
+    return guard(async function () {
+      var sc = await readText('jf_sc'), dj = await readText('jf_do'), si = await readText('jf_si');
+      if (!sc && !dj && !si) throw new Error('Pilih minimal satu berkas CSV.');
+      var m = mergeJurnal({ scimago: sc ? csvObjs(sc) : [], doaj: dj ? csvObjs(dj) : [], sinta: si ? csvObjs(si) : [] });
+      if (!m.rows.length) throw new Error('Tidak ada baris yang cocok. Periksa bahwa berkas adalah CSV resmi dengan header aslinya.');
+      JRDATA = m.rows; var s = m.stat;
+      $('#jrAdm').innerHTML = '<div class="note"><small>Hasil baca</small><p>' + m.rows.length + ' jurnal siap diimpor (Scimago ' + s.scimago + ', DOAJ ' + s.doaj + ', SINTA ' + s.sinta + ' dengan ' + s.sintaBaru + ' jurnal khusus SINTA).</p><p class="muted" style="font-size:.85rem">Mengimpor akan MENGGANTI seluruh basis data jurnal yang sekarang.</p></div><div class="row" style="justify-content:flex-end;margin-top:10px"><button class="btn primary" data-act="jrImport">Impor ' + m.rows.length + ' jurnal</button></div>';
+    }, 'Membaca berkas…');
+  },
+  jrImport: function () {
+    if (!JRDATA) return;
+    return guard(async function () {
+      var n = JRDATA.length, sent = 0;
+      for (var i = 0; i < n; i += 1000) {
+        var res = await api('adminJurnalImport', { mode: i === 0 ? 'replace' : 'append', rows: JRDATA.slice(i, i + 1000) });
+        sent += res.added; $('#jrAdm').innerHTML = '<p>Mengirim… ' + sent + ' dari ' + n + '</p>';
+      }
+      JRDATA = null; jurnalAdminModal(await api('adminJurnalStatus')); toast('Basis data jurnal diperbarui: ' + sent + ' jurnal.');
+    }, 'Mengimpor…');
+  },
   assets: function () { return guard(async function () { assetModal(await api('adminAssetStatus')); }, 'Memuat…'); },
   remind: function (t) { remindModal(t.dataset.id); },
   remindSend: function (t) {
@@ -1402,6 +1776,14 @@ var ACT = {
 };
 
 var CHG = {
+  ujiJenis: function (el) {
+    var a = el.value === 'Artikel'; $('#ujiJenj').hidden = !a; $('#ujiJur').hidden = !a;
+    var j = $('#ujiJur input'); if (j) j.required = a;
+  },
+  ujchk: function (el) {
+    var id = el.dataset.id, i = +el.dataset.i, off = ujOff(id), k = off.indexOf(i);
+    if (!el.checked && k < 0) off.push(i); if (el.checked && k >= 0) off.splice(k, 1); store.set('ujo_' + id, JSON.stringify(off));
+  },
   asset: function (el) {
     var f = el.files[0], kind = el.dataset.kind; if (!f) return;
     if (!/^image\/(png|jpeg)$/.test(f.type)) { el.value = ''; return toast('Gunakan gambar PNG atau JPG.', 'err'); }
@@ -1471,7 +1853,8 @@ document.addEventListener('submit', function (e) {
     if (!S.cap) return toast('Soal verifikasi belum termuat. Klik tombol muat ulang.', 'err');
     guard(async function () {
       try {
-        await api('register', Object.assign({}, fd, { consentAi: !!fd.consentAi, captchaToken: S.cap.token, captchaAnswer: $('#capa').value }), true);
+        var rg = await api('register', Object.assign({}, fd, { consentAi: !!fd.consentAi, captchaToken: S.cap.token, captchaAnswer: $('#capa').value, mode: S.regMode === 'penguji' ? 'penguji' : 'bimbingan' }), true);
+        S.regInfo = { adminWa: rg.adminWa, tok: rg.waTok, text: waRegText(fd) };
       } catch (err) { loadCaptcha(); throw err; }
       S.pendingEmail = fd.email.trim().toLowerCase(); S.view = 'registered'; render();
     }, 'Membuat akun…');
