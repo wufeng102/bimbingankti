@@ -128,6 +128,14 @@ header.top .in{max-width:1040px;margin:0 auto;padding:10px 16px;display:flex;ali
 .btn.good{background:var(--green);color:#fff}
 .btn.warn{background:var(--amber);color:#fff}
 .btn.wa{background:#1f9d4d;color:#fff}
+.skq{border:1px solid var(--line);border-radius:12px;padding:12px 14px;margin:14px 0 0;min-width:0}
+.skt{font-weight:600;font-size:.95rem;margin:0 0 4px}
+.skr{display:flex;gap:10px;align-items:flex-start;padding:7px 0;cursor:pointer}
+.skr input{margin-top:4px;flex:none}
+.skstop{margin:10px 0 0;padding:10px 12px;border-radius:10px;background:#fff1f0;color:#b3261e;font-size:.9rem}
+.wag{display:flex;align-items:center;gap:10px;margin:14px 0 0;padding:12px 14px;border:1px solid #bfe3cb;background:#eefaf2;border-radius:12px;color:#157a3b;font-weight:600;text-decoration:underline;text-underline-offset:3px}
+.wag svg{flex:none;color:#1f9d4d}
+.wag:hover{background:#e3f6ea}
 .btn.ghost{background:transparent;border:1px solid var(--line)}
 .hero2 .btn{background:#fff;color:var(--text);border:1px solid var(--line)}.hero2 .btn:hover{background:#f1f5fc}
 .hero2 .btn.wa{background:#1f9d4d}
@@ -379,6 +387,25 @@ function toast(m, kind) {
 }
 function busy(msg) { $('#busyMsg').textContent = msg || 'Memproses…'; $('#busy').hidden = false; }
 function unbusy() { $('#busy').hidden = true; }
+/* Berkas SK: gambar diperkecil (maks. 1800 px, JPEG) agar ringan; PDF dikirim apa adanya */
+async function prepSk(file) {
+  var n = String(file.name || 'SK').toLowerCase();
+  if (/\.pdf$/.test(n) || file.type === 'application/pdf') {
+    if (file.size > 5 * 1048576) throw new Error('Ukuran SK melebihi 5 MB.');
+    return { name: 'SK.pdf', b64: await toB64(file) };
+  }
+  if (!/\.(jpe?g|png)$/.test(n) && !/^image\/(jpeg|png)$/.test(file.type)) throw new Error('SK harus berupa PDF, JPG, atau PNG.');
+  var url = URL.createObjectURL(file);
+  try {
+    var img = await new Promise(function (ok, no) { var i = new Image(); i.onload = function () { ok(i); }; i.onerror = function () { no(new Error('Gambar SK tidak dapat dibaca.')); }; i.src = url; });
+    var sc = Math.min(1, 1800 / Math.max(img.naturalWidth, img.naturalHeight)), c = document.createElement('canvas');
+    c.width = Math.round(img.naturalWidth * sc); c.height = Math.round(img.naturalHeight * sc);
+    var cx = c.getContext('2d'); cx.fillStyle = '#fff'; cx.fillRect(0, 0, c.width, c.height); cx.drawImage(img, 0, 0, c.width, c.height);
+    var b64 = c.toDataURL('image/jpeg', 0.85).split(',')[1];
+    if (b64.length * 0.75 > 5 * 1048576) throw new Error('Ukuran SK melebihi 5 MB.');
+    return { name: 'SK.jpg', b64: b64 };
+  } finally { URL.revokeObjectURL(url); }
+}
 function toB64(file) {
   return new Promise(function (res, rej) {
     var r = new FileReader();
@@ -606,6 +633,7 @@ function studentView() {
   var h = '<section class="hero2"><div class="hrow"><div class="hm"><small>Halo, ' + esc(p.nama) + '</small><h1>' + esc(p.judul) + '</h1>' +
     '<div class="chips"><span class="chip">' + esc(p.jenis) + ' ' + esc(p.jenjang) + '</span><span class="chip">' + esc(p.konsentrasi) + '</span><span class="chip">NPM ' + esc(p.npm) + '</span>' + (isUji(p) ? '<span class="chip">Diuji: ' + esc(ujiLbl(p)) + '</span>' : '') + '</div></div>' +
     '<div class="pc"><b>' + pr.pct + '%</b><small>' + pr.done + ' dari ' + pr.total + ' tahap selesai</small></div></div>' + jalur(ms) + '</section>';
+  if (!isUji(p) && m.config.waGroup) h += '<a class="wag" href="' + esc(m.config.waGroup) + '" target="_blank" rel="noopener"><svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true"><path fill="currentColor" d="M12.04 2a9.93 9.93 0 0 0-8.5 15.1L2 22l5.05-1.5A9.93 9.93 0 1 0 12.04 2Zm0 18.1c-1.5 0-2.97-.4-4.25-1.17l-.3-.18-3 .88.9-2.93-.2-.31a8.1 8.1 0 1 1 6.85 3.71Zm4.44-6.07c-.24-.12-1.44-.71-1.66-.79-.22-.08-.39-.12-.55.12-.16.24-.63.79-.77.95-.14.16-.28.18-.52.06-.24-.12-1.02-.38-1.94-1.2-.72-.64-1.2-1.43-1.34-1.67-.14-.24-.02-.37.1-.49.11-.11.24-.28.36-.42.12-.14.16-.24.24-.4.08-.16.04-.3-.02-.42-.06-.12-.55-1.32-.75-1.8-.2-.47-.4-.41-.55-.42h-.47c-.16 0-.42.06-.64.3-.22.24-.84.82-.84 2s.86 2.32.98 2.48c.12.16 1.7 2.6 4.12 3.64.58.25 1.03.4 1.38.51.58.18 1.1.16 1.52.1.46-.07 1.44-.59 1.64-1.16.2-.57.2-1.06.14-1.16-.06-.1-.22-.16-.46-.28Z"/></svg><span>Gabung ke Grup WA Bimbingan Andi Azhar</span></a>';
   h += strip([['Tahap selesai', pr.done, 'var(--green)', 'dari ' + pr.total + ' tahap'], ['Tahap tersisa', pr.total - pr.done, '', 'sampai selesai'], ['Pengajuan', subs, '', 'dokumen terkirim'], ['Revisi diminta', revs, revs ? 'var(--amber)' : '', 'dari dosen']]);
   if (cur) {
     var txt = cur.state === 'open' ? 'Unggah dokumen DOCX untuk tahap ini.' : cur.state === 'revision' ? 'Dosen meminta revisi. Baca catatannya, perbaiki naskah, lalu unggah ulang.' : 'Dokumen sudah terkirim dan menunggu pemeriksaan dosen.';
@@ -905,7 +933,9 @@ function adminJalur(L) {
   return h + extra;
 }
 function adminListView() {
-  var L = S.list || [], q = S.q.toLowerCase();
+  var ALL = S.list || [], q = S.q.toLowerCase();
+  var rejN = ALL.filter(function (u) { return u.approval === 'rejected'; }).length;
+  var L = ALL.filter(function (u) { return u.approval !== 'rejected'; });
   var done = L.filter(function (u) { return u.status === 'closed'; }), act = L.filter(function (u) { return u.status !== 'closed'; });
   var wait = act.filter(function (u) { return u.waiting; }), run = act.length - wait.length;
   var unv = L.filter(function (u) { return u.verified !== 'Y'; }).length;
@@ -914,7 +944,7 @@ function adminListView() {
   var mx = Math.max(1, by('jenis', 'Skripsi').t, by('jenis', 'Tesis').t, by('jenis', 'Artikel').t);
   var mk = Math.max(1, by('konsentrasi', 'Pemasaran').t, by('konsentrasi', 'MSDM').t);
   var idleN = L.filter(function (u) { return u.idle; }).length, ujN = L.filter(function (u) { return u.tipe === 'penguji'; }).length, pendN = L.filter(function (u) { return u.approval === 'pending'; }).length;
-  var rows = L.filter(function (u) {
+  var rows = (S.flt === 'rej' ? ALL.filter(function (u) { return u.approval === 'rejected'; }) : L).filter(function (u) {
     if (S.flt === 'wait' && !u.waiting) return false;
     if (S.flt === 'active' && u.status === 'closed') return false;
     if (S.flt === 'done' && u.status !== 'closed') return false;
@@ -923,7 +953,7 @@ function adminListView() {
     if (S.flt === 'pend' && u.approval !== 'pending') return false;
     return !q || (u.nama + ' ' + u.npm + ' ' + u.judul).toLowerCase().indexOf(q) >= 0;
   }).sort(function (a, b) { return (b.waiting - a.waiting) || String(a.nama).localeCompare(b.nama); });
-  var fl = [['all', 'Semua'], ['wait', 'Perlu review'], ['idle', 'Tanpa progres (' + idleN + ')'], ['pend', 'Menunggu persetujuan (' + pendN + ')'], ['uji', 'Diuji (' + ujN + ')'], ['active', 'Berproses'], ['done', 'Selesai']].map(function (f) { return '<button class="' + (S.flt === f[0] ? 'on' : '') + '" data-act="flt" data-f="' + f[0] + '">' + f[1] + '</button>'; }).join('');
+  var fl = [['all', 'Semua'], ['wait', 'Perlu review'], ['idle', 'Tanpa progres (' + idleN + ')'], ['pend', 'Menunggu persetujuan (' + pendN + ')'], ['uji', 'Diuji (' + ujN + ')'], ['active', 'Berproses'], ['done', 'Selesai']].concat(rejN ? [['rej', 'Ditolak (' + rejN + ')']] : []).map(function (f) { return '<button class="' + (S.flt === f[0] ? 'on' : '') + '" data-act="flt" data-f="' + f[0] + '">' + f[1] + '</button>'; }).join('');
   var h = '<div class="pg"><h1>Dashboard pembimbing</h1><p>' + esc(today()) + '</p><button class="btn sm" data-act="assets">Pengaturan dokumen</button> <button class="btn sm" data-act="jrAdmin">Basis data jurnal</button></div>' +
     pendPanel(L) + strip([['Seluruh mahasiswa', L.length, '', unv ? unv + ' belum verifikasi email' : 'semua terverifikasi'], ['Berproses', run, 'var(--accent)', 'sedang menyusun'], ['Perlu review', wait.length, wait.length ? 'var(--amber)' : '', 'menunggu catatan Anda'], ['Selesai', done.length, 'var(--green)', 'akun sudah ditutup']]) +
     '<div class="pn"><div class="row"><h3>Status bimbingan</h3><small class="sp"></small><small>' + L.length + ' mahasiswa</small></div>' +
@@ -938,6 +968,7 @@ function adminListView() {
     '<div class="tools"><input class="inp" placeholder="Cari nama, NPM, atau judul" value="' + esc(S.q) + '" data-inp="q" aria-label="Cari mahasiswa"><div class="filters">' + '<div class="seg">' + fl + '</div></div></div>';
   if (!rows.length) return h + '<div class="card mk"><p class="muted" style="margin:0">' + (L.length ? 'Tidak ada mahasiswa yang cocok dengan filter.' : 'Belum ada mahasiswa terdaftar.') + '</p></div>';
   return h + '<div class="rows">' + rows.map(function (u) {
+    if (u.approval === 'rejected') return '<div class="rw">' + avatar(u.nama) + '<div class="nm"><b>' + esc(u.nama) + '</b><small>' + esc(u.npm) + ', ' + esc(u.jenis) + ' ' + esc(u.jenjang) + ' ' + esc(u.konsentrasi) + '</small></div><div class="tg"><span class="tag r">Ditolak</span> <button class="btn sm warn" data-act="delUser" data-id="' + u.id + '">Hapus</button></div></div>';
     var st = u.approval === 'pending' ? '<span class="tag y">Menunggu persetujuan</span>' : u.approval === 'rejected' ? '<span class="tag r">Ditolak</span>' : u.status === 'closed' ? '<span class="tag g">Selesai</span>' : u.waiting ? '<span class="tag y"><span class="pulse"></span>Perlu review</span>' : '<span class="tag b">Berproses</span>';
     return '<button class="rw ' + (u.status === 'closed' ? 'fin' : '') + '" data-act="open" data-id="' + u.id + '">' + avatar(u.nama) +
       '<div class="nm"><b>' + esc(u.nama) + '</b><small>' + esc(u.npm) + ', ' + esc(u.jenis) + ' ' + esc(u.jenjang) + ' ' + esc(u.konsentrasi) + '</small></div>' +
@@ -954,6 +985,7 @@ function adminDetailView() {
     '<div class="acts"><a class="btn sm wa" target="_blank" rel="noopener" href="https://wa.me/' + esc(p.wa) + '">WhatsApp</a><a class="btn sm" href="mailto:' + esc(p.email) + '">Email</a>' +
     (p.approval === 'pending' ? '<button class="btn sm good" data-act="approve" data-dec="approve" data-id="' + p.id + '">Setujui pendaftar</button><button class="btn sm warn" data-act="approve" data-dec="reject" data-id="' + p.id + '">Tolak</button>' : '') +
     (p.hasRiwayat ? '<button class="btn sm good" data-act="dl" data-kind="riwayat" data-id="' + p.id + '">Unduh riwayat revisi (PDF)</button>' : '') +
+    (p.hasSk ? '<button class="btn sm good" data-act="dl" data-kind="sk" data-id="' + p.id + '">Lihat SK Dosen Pembimbing</button>' : '') +
     (p.hasBlanko ? '<button class="btn sm good" data-act="dl" data-kind="blanko" data-id="' + p.id + '">Unduh blanko persetujuan perbaikan (DOCX)</button>' : '') +
     (p.verified !== 'Y' ? '<button class="btn sm warn" data-act="verify" data-id="' + p.id + '">Verifikasi manual</button>' : '') +
     (p.hasFinal ? '<button class="btn sm good" data-act="dl" data-kind="final" data-id="' + p.id + '">Unduh berkas final</button>' : '') +
@@ -1526,7 +1558,13 @@ function regFieldsBimbingan() {
     '<label class="f">Judul tugas akhir (sementara)<textarea class="inp" name="judul" required minlength="10" maxlength="300" style="min-height:84px"></textarea></label>' +
     '<div class="grid2"><label class="f">No. WhatsApp<input class="inp" name="wa" type="tel" required placeholder="08xxxxxxxxxx" autocomplete="tel"></label>' +
     '<label class="f">Email<input class="inp" name="email" type="email" required autocomplete="email"></label></div>' +
-    '<label class="f">Alamat tempat tinggal<textarea class="inp" name="alamat" required minlength="5" maxlength="300" style="min-height:70px" autocomplete="street-address"></textarea></label>';
+    '<label class="f">Alamat tempat tinggal<textarea class="inp" name="alamat" required minlength="5" maxlength="300" style="min-height:70px" autocomplete="street-address"></textarea></label>' +
+    '<div class="skq" role="radiogroup"><p class="skt">Apakah Anda sudah menerima SK Dosen Pembimbing Skripsi / Tesis / Artikel dari Prodi?</p>' +
+    '<label class="skr"><input type="radio" name="skStatus" value="sk" data-chg="skSel" required><span>Sudah, saya menerima SK dari Prodi</span></label>' +
+    '<label class="skr"><input type="radio" name="skStatus" value="rekomendasi" data-chg="skSel"><span>Sudah direkomendasikan oleh Pak Andi</span></label>' +
+    '<label class="skr"><input type="radio" name="skStatus" value="belum" data-chg="skSel"><span>Belum</span></label>' +
+    '<div id="skFileBox" hidden><label class="f" style="margin-top:10px">Unggah SK Dosen Pembimbing<input class="inp" id="skFile" type="file" accept=".pdf,.jpg,.jpeg,.png,application/pdf,image/jpeg,image/png"><small class="muted">PDF, JPG, atau PNG, maksimal 5 MB. Foto akan diperkecil otomatis.</small></label></div>' +
+    '<p id="skStop" class="skstop" hidden>Pendaftaran hanya untuk mahasiswa yang sudah menerima SK Dosen Pembimbing dari Prodi atau sudah direkomendasikan oleh Pak Andi. Silakan daftar kembali setelah SK Anda terbit atau setelah Anda berkoordinasi dengan beliau.</p></div>';
 }
 function registeredView() {
   var ri = S.regInfo || {};
@@ -1662,7 +1700,7 @@ function pendPanel(L) {
   return '<div class="pn" style="border-color:var(--amber)"><h3>Menunggu persetujuan (' + P.length + ')</h3><small>Akun belum bisa dipakai sebelum Anda setujui.</small>' + P.map(function (u) {
     return '<div class="row" style="padding:12px 0 0;margin-top:12px;border-top:1px solid var(--line);gap:10px;flex-wrap:wrap;align-items:flex-start"><div style="flex:1;min-width:230px"><b>' + esc(u.nama) + '</b> <small>NPM ' + esc(u.npm) + '</small><br>' +
       '<small>' + (u.tipe === 'penguji' ? 'Mahasiswa uji (' + (u.siklus === 'sidang' ? 'Sidang Akhir' : 'Seminar Proposal') + ')' : 'Mahasiswa bimbingan') + ', ' + esc(u.jenis) + ' ' + esc(u.jenjang) + ', ' + esc(u.konsentrasi) + (u.jurnalTarget ? ', jurnal tujuan ' + esc(u.jurnalTarget) : '') + '</small><br><small>' + esc(u.judul) + '</small><br>' +
-      '<small>' + (u.waClickAt ? '<span class="tag g">sudah klik tombol WA</span>' : '<span class="tag r">belum klik tombol WA</span>') + ' ' + (u.verified === 'Y' ? '<span class="tag g">email terverifikasi</span>' : '<span class="tag a">email belum diverifikasi</span>') + '</small></div>' +
+      '<small>' + (u.tipe === 'penguji' ? '' : u.skStatus === 'sk' ? '<span class="tag g">SK terlampir</span> <button class="lnk" data-act="dl" data-kind="sk" data-id="' + u.id + '">⬇ Lihat SK</button> ' : u.skStatus === 'rekomendasi' ? '<span class="tag a">Mengaku direkomendasikan Pak Andi</span> ' : '') + (u.waClickAt ? '<span class="tag g">sudah klik tombol WA</span>' : '<span class="tag r">belum klik tombol WA</span>') + ' ' + (u.verified === 'Y' ? '<span class="tag g">email terverifikasi</span>' : '<span class="tag a">email belum diverifikasi</span>') + '</small></div>' +
       '<div class="row" style="gap:8px"><a class="btn sm wa" target="_blank" rel="noopener" href="https://wa.me/' + esc(u.wa) + '">WhatsApp</a><button class="btn sm good" data-act="approve" data-dec="approve" data-id="' + u.id + '">Setujui</button><button class="btn sm warn" data-act="approve" data-dec="reject" data-id="' + u.id + '">Tolak</button></div></div>';
   }).join('') + '</div>';
 }
@@ -1670,6 +1708,15 @@ function pendPanel(L) {
 var ACT = {
   regMode: function (t) { S.regMode = t.dataset.m === 'penguji' ? 'penguji' : 'bimbingan'; render(); },
   regWa: function () { var tk = S.regInfo && S.regInfo.tok; if (tk) api('regWaClick', { tok: tk }, true).catch(function () {}); },
+  delUser: function (t) {
+    var id = t.dataset.id, u = (S.list || []).filter(function (x) { return x.id === id; })[0];
+    if (!confirm('Hapus permanen ' + (u ? u.nama + ' (NPM ' + u.npm + ')' : 'pendaftar ini') + ' dari daftar?\n\nData pendaftarannya dan folder Drive-nya dihapus dan tidak dapat dikembalikan.')) return;
+    return guard(async function () {
+      await api('adminDeleteUser', { userId: id });
+      await loadList(); if (!(S.list || []).some(function (x) { return x.approval === 'rejected'; }) && S.flt === 'rej') S.flt = 'all'; render();
+      toast('Pendaftar dihapus dari daftar.');
+    }, 'Menghapus…');
+  },
   approve: function (t) {
     var id = t.dataset.id, dec = t.dataset.dec, u = (S.list || []).filter(function (x) { return x.id === id; })[0] || (S.detail && S.detail.profile && S.detail.profile.id === id ? S.detail.profile : null), reason = '';
     if (dec === 'reject') { var rs = prompt('Alasan penolakan (opsional, dikirim ke pendaftar):'); if (rs === null) return; reason = rs; }
@@ -1901,6 +1948,11 @@ var ACT = {
 };
 
 var CHG = {
+  skSel: function (el) {
+    var v = el.value, f = el.form, btn = f && f.querySelector('button.primary');
+    $('#skFileBox').hidden = v !== 'sk'; $('#skStop').hidden = v !== 'belum';
+    if (btn) btn.disabled = v === 'belum';
+  },
   ujiJenis: function (el) {
     var a = el.value === 'Artikel'; $('#ujiJenj').hidden = !a; $('#ujiJur').hidden = !a;
     var j = $('#ujiJur input'); if (j) j.required = a;
@@ -1976,7 +2028,15 @@ document.addEventListener('submit', function (e) {
   } else {
     if (fd.password !== fd.password2) return toast('Ulangi password tidak sama.', 'err');
     if (!S.cap) return toast('Soal verifikasi belum termuat. Klik tombol muat ulang.', 'err');
+    var skFile = null;
+    if (S.regMode !== 'penguji') {
+      if (!fd.skStatus) return toast('Jawab pertanyaan tentang SK Dosen Pembimbing terlebih dahulu.', 'err');
+      if (fd.skStatus === 'belum') return toast('Pendaftaran hanya untuk yang sudah menerima SK atau direkomendasikan Pak Andi.', 'err');
+      if (fd.skStatus === 'sk') { var sf = $('#skFile') && $('#skFile').files[0]; if (!sf) return toast('Unggah berkas SK Dosen Pembimbing.', 'err'); skFile = sf; }
+    }
+    delete fd.skFile;
     guard(async function () {
+      if (skFile) fd.skFile = await prepSk(skFile);
       try {
         var rg = await api('register', Object.assign({}, fd, { consentAi: true, captchaToken: S.cap.token, captchaAnswer: $('#capa').value, mode: S.regMode === 'penguji' ? 'penguji' : 'bimbingan' }), true);
         S.regInfo = { adminWa: rg.adminWa, tok: rg.waTok, text: waRegText(fd) };
