@@ -1,6 +1,6 @@
 /* Service worker E-Theses System. Hanya menyimpan cangkang aplikasi (HTML, ikon).
    Data bimbingan dan berkas tidak pernah disimpan di perangkat. */
-var VER = 'etheses-v1';
+var VER = 'etheses-v2';
 var SHELL = ['./', 'manifest.webmanifest', 'icon-192.png', 'icon-512.png', 'apple-touch-icon.png'];
 
 self.addEventListener('install', function (e) {

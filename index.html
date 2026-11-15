@@ -7,7 +7,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-<title>Bimbingan Karya Ilmiah</title>
+<title>E-Theses Application</title>
 <meta name="theme-color" content="#f4f6f9">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-capable" content="yes">
@@ -515,7 +515,7 @@ function header() {
   if (stu) items = nav('student', 'Dashboard') + nav('lib', 'Perpustakaan');
   if (adm) items = nav('adminList', 'Mahasiswa') + nav('lib', 'Perpustakaan' + (pendCount() ? '<i class="bdg">' + pendCount() + '</i>' : ''));
   if (S.me) { var nm = stu ? S.me.profile.nama : S.me.config.adminName; chip = '<div class="uchip">' + avatar(nm) + '<span>' + esc(stu ? nm.split(' ')[0] : 'Dosen pembimbing') + '</span></div>'; }
-  return '<header class="top"><div class="in"><div class="brand"><span class="lg">' + ICO.cap + '</span><span class="bt"><b>Bimbingan karya ilmiah</b><small>' +
+  return '<header class="top"><div class="in"><div class="brand"><span class="lg">' + ICO.cap + '</span><span class="bt"><b>E-Theses Application</b><small>' +
     (S.me ? 'Pembimbing: ' + esc(S.me.config.adminName) : 'Universitas Muhammadiyah Bengkulu') + '</small></span></div>' +
     '<nav class="nav">' + items + '</nav><span id="pwaSlot">' + pwaBtn() + '</span>' + chip + (S.auth ? '<button class="btn sm ghost" data-act="logout">Keluar</button>' : '') + '</div></header>';
 }
@@ -571,8 +571,6 @@ function authView() {
     '<label class="f">Ulangi password<input class="inp" name="password2" type="password" minlength="8" required autocomplete="new-password"></label></div>' +
     '<label class="f">Verifikasi bukan robot<span class="cap"><span class="q" id="capq">…</span><input class="inp" id="capa" inputmode="numeric" required style="margin:0" placeholder="Jawaban"><button type="button" class="btn sm" data-act="cap" aria-label="Soal baru">↻</button></span></label>' +
     '<input class="hp" name="website" tabindex="-1" autocomplete="off" aria-hidden="true">' +
-    '<label class="f" style="display:flex;gap:10px;align-items:flex-start;color:var(--text);font-weight:400"><input type="checkbox" name="consentAi" required style="margin-top:4px;width:18px;height:18px"><span>' +
-    (S.regMode === 'penguji' ? 'Saya menyetujui naskah dan data saya diproses untuk keperluan pengujian, termasuk pemeriksaan awal dengan bantuan kecerdasan buatan yang kemudian ditinjau dosen penguji.' : 'Saya menyetujui dokumen dan data saya diproses untuk keperluan bimbingan, termasuk pemeriksaan awal dengan bantuan kecerdasan buatan yang kemudian ditinjau dosen pembimbing.') + '</span></label>' +
     '<p class="muted" style="font-size:.86rem;margin:12px 0 0">Setelah mendaftar, Anda wajib mengabari dosen lewat tombol WhatsApp. Akun baru aktif setelah disetujui dosen.</p>' +
     '<button class="btn primary block" style="margin-top:14px">Daftar</button></form>';
   var guide = '<a class="guide" href="' + CONFIG.GUIDE_URL + '" download="Buku-Panduan-E-Theses-System.pdf" rel="noopener">' +
@@ -956,6 +954,7 @@ function adminDetailView() {
     '<div class="acts"><a class="btn sm wa" target="_blank" rel="noopener" href="https://wa.me/' + esc(p.wa) + '">WhatsApp</a><a class="btn sm" href="mailto:' + esc(p.email) + '">Email</a>' +
     (p.approval === 'pending' ? '<button class="btn sm good" data-act="approve" data-dec="approve" data-id="' + p.id + '">Setujui pendaftar</button><button class="btn sm warn" data-act="approve" data-dec="reject" data-id="' + p.id + '">Tolak</button>' : '') +
     (p.hasRiwayat ? '<button class="btn sm good" data-act="dl" data-kind="riwayat" data-id="' + p.id + '">Unduh riwayat revisi (PDF)</button>' : '') +
+    (p.hasBlanko ? '<button class="btn sm good" data-act="dl" data-kind="blanko" data-id="' + p.id + '">Unduh blanko persetujuan perbaikan (DOCX)</button>' : '') +
     (p.verified !== 'Y' ? '<button class="btn sm warn" data-act="verify" data-id="' + p.id + '">Verifikasi manual</button>' : '') +
     (p.hasFinal ? '<button class="btn sm good" data-act="dl" data-kind="final" data-id="' + p.id + '">Unduh berkas final</button>' : '') +
     (d.remind && d.remind.ball === 'mahasiswa' ? '<button class="btn sm ' + (d.remind.idle ? 'warn' : '') + '" data-act="remind" data-id="' + p.id + '">Ingatkan mahasiswa' + (d.remind.idleDays ? ' (' + d.remind.idleDays + ' hari)' : '') + '</button>' : '') + '</div></div>' +
@@ -1123,6 +1122,114 @@ async function ensurePdfLib() {
 }
 function pdfTxt(t) { return String(t == null ? '' : t).replace(/\r/g, '').replace(/[‘’]/g, "'").replace(/[“”]/g, '"').replace(/[^\x09\x0A\x20-\x7E -ÿ–—•…]/g, ''); }
 function dataUrl(a) { return a ? 'data:' + a.mime + ';base64,' + a.b64 : null; }
+/* ---------- Blanko resmi prodi (DOCX) ---------- */
+var JSZIP = 'https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js';
+var TPL_BASE = 'templates/';
+async function ensureZip() { if (!window.JSZip) await loadScript(JSZIP); }
+function xe(s) { return String(s == null ? '' : s).replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F]/g, '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;'); }
+function xLines(s) { return String(s == null ? '' : s).replace(/\r/g, '').split('\n').map(xe).join('</w:t><w:br/><w:t xml:space="preserve">'); }
+function b64bytes(b64) { var bin = atob(b64), a = new Uint8Array(bin.length); for (var i = 0; i < bin.length; i++) a[i] = bin.charCodeAt(i); return a; }
+function imgDims(a) { /* PNG / JPEG tanpa DOM */
+  if (a[0] === 0x89 && a[1] === 0x50) return { w: (a[16] << 24 | a[17] << 16 | a[18] << 8 | a[19]) >>> 0, h: (a[20] << 24 | a[21] << 16 | a[22] << 8 | a[23]) >>> 0, ext: 'png' };
+  var i = 2;
+  while (i < a.length) {
+    if (a[i] !== 0xFF) { i++; continue; }
+    var m = a[i + 1], len = a[i + 2] << 8 | a[i + 3];
+    if (m >= 0xC0 && m <= 0xCF && m !== 0xC4 && m !== 0xC8 && m !== 0xCC) return { h: a[i + 5] << 8 | a[i + 6], w: a[i + 7] << 8 | a[i + 8], ext: 'jpeg' };
+    i += 2 + len;
+  }
+  return null;
+}
+function drawingXml(rid, id, wCm, hCm, maxW, maxH) {
+  var sc = Math.min(maxW / wCm, maxH / hCm, 10); wCm *= sc; hCm *= sc;
+  var cx = Math.round(wCm * 360000), cy = Math.round(hCm * 360000);
+  return '<w:drawing><wp:inline xmlns:wp="http://schemas.openxmlformats.org/drawingml/2006/wordprocessingDrawing" distT="0" distB="0" distL="0" distR="0"><wp:extent cx="' + cx + '" cy="' + cy + '"/><wp:docPr id="' + id + '" name="Tanda tangan ' + id + '"/>' +
+    '<a:graphic xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main"><a:graphicData uri="http://schemas.openxmlformats.org/drawingml/2006/picture"><pic:pic xmlns:pic="http://schemas.openxmlformats.org/drawingml/2006/picture">' +
+    '<pic:nvPicPr><pic:cNvPr id="' + id + '" name="ttd"/><pic:cNvPicPr/></pic:nvPicPr><pic:blipFill><a:blip xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" r:embed="' + rid + '"/><a:stretch><a:fillRect/></a:stretch></pic:blipFill>' +
+    '<pic:spPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="' + cx + '" cy="' + cy + '"/></a:xfrm><a:prstGeom prst="rect"><a:avLst/></a:prstGeom></pic:spPr></pic:pic></a:graphicData></a:graphic></wp:inline></w:drawing>';
+}
+/* isi satu template: V = nilai penanda, rows = [{NO,TGL,CAT,...}], ttd = {mime,b64} */
+async function fillDocx(tplName, V, rowKey, rows, minRows, ttd, sizes) {
+  await ensureZip();
+  var res = await fetch(TPL_BASE + tplName, { cache: 'no-cache' });
+  if (!res.ok) throw new Error('Template ' + tplName + ' tidak ditemukan di situs. Unggah folder templates/ ke repositori.');
+  var zip = await window.JSZip.loadAsync(await res.arrayBuffer());
+  var xml = await zip.file('word/document.xml').async('string');
+  var dims = null, ttdBytes = null;
+  if (ttd && ttd.b64) { ttdBytes = b64bytes(ttd.b64); dims = imgDims(ttdBytes); }
+  var n = 100;
+  function pic(box) { return dims ? drawingXml('rIdTtdSig', ++n, dims.w, dims.h, box[0], box[1]) : ''; }
+  function sub(s, tag, val, raw) {
+    if (raw) return s.replace(new RegExp('<w:t[^>]*>\\{\\{' + tag + '\\}\\}</w:t>', 'g'), function () { return val; });
+    return s.split('{{' + tag + '}}').join(xLines(val));
+  }
+  /* baris berulang */
+  var re = new RegExp('<w:tr[ >](?:(?!</w:tr>)[\\s\\S])*?\\{\\{' + rowKey + '\\}\\}[\\s\\S]*?</w:tr>');
+  var m = xml.match(re);
+  if (m) {
+    var out = '', all = rows.slice();
+    while (all.length < minRows) all.push({});
+    all.forEach(function (r, i) {
+      var t = m[0];
+      Object.keys(r).forEach(function (k) { if (k !== 'PARAF') t = sub(t, k, r[k]); });
+      t = sub(t, 'PARAF', r.CAT ? pic(sizes.paraf).replace(/^/, '') : '', true);
+      t = t.replace(/\{\{[A-Z]+\}\}/g, '');
+      out += t;
+    });
+    xml = xml.replace(re, function () { return out; });
+  }
+  Object.keys(V).forEach(function (k) { xml = sub(xml, k, V[k]); });
+  xml = xml.replace(/<w:t[^>]*>\{\{TTD\}\}<\/w:t>/g, function () { return pic(sizes.ttd); });
+  zip.file('word/document.xml', xml);
+  if (dims) {
+    var ext = dims.ext === 'jpeg' ? 'jpeg' : 'png', mt = ext === 'jpeg' ? 'image/jpeg' : 'image/png';
+    zip.file('word/media/ttd_sig.' + ext, ttdBytes);
+    var rels = await zip.file('word/_rels/document.xml.rels').async('string');
+    rels = rels.replace('</Relationships>', '<Relationship Id="rIdTtdSig" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/image" Target="media/ttd_sig.' + ext + '"/></Relationships>');
+    zip.file('word/_rels/document.xml.rels', rels);
+    var ct = await zip.file('[Content_Types].xml').async('string');
+    if (ct.indexOf('Extension="' + ext + '"') < 0) ct = ct.replace('<Override', '<Default Extension="' + ext + '" ContentType="' + mt + '"/><Override');
+    zip.file('[Content_Types].xml', ct);
+  }
+  return zip;
+}
+async function zipOut(zip, kind) { return zip.generateAsync({ type: kind, mimeType: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document', compression: 'DEFLATE' }); }
+function saveBlobAs(blob, name) { var a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = name; document.body.appendChild(a); a.click(); setTimeout(function () { URL.revokeObjectURL(a.href); a.remove(); }, 1500); }
+function plainNote(s) { return String(s || '').replace(/\*\*/g, '').replace(/[ \t]+\n/g, '\n').trim(); }
+/* Berita acara bimbingan: D = hasil api('catatanBimbingan') */
+async function buildBeritaAcara(D) {
+  var m = D.meta, mag = /^S[23]$/i.test(m.jenjang || '');
+  var rows = D.rows.map(function (r, i) { return { NO: String(r.no) + '.', TGL: r.tanggal, CAT: r.head + (r.catatan ? '\n' + plainNote(r.catatan) : ''), PARAF: '1' }; });
+  var zip = await fillDocx(mag ? 'berita-acara-magister.docx' : 'berita-acara-s1.docx',
+    { NAMA: m.nama, NPM: m.npm, TGLTTD: m.tanggal, DOSEN: m.signName }, 'NO', rows, 5, D.ttd, { ttd: [4.2, 1.5], paraf: [1.2, 0.9] });
+  return zip;
+}
+async function makeBlankoBimbingan(milestone, userId) {
+  var D = await api('catatanBimbingan', { milestone: milestone, userId: userId || undefined });
+  var zip = await buildBeritaAcara(D), blob = await zipOut(zip, 'blob');
+  saveBlobAs(blob, 'Berita-Acara-Bimbingan_' + String(D.meta.npm).replace(/\W+/g, '') + '_' + milestone.replace('acc-', '') + '.docx');
+  return { rows: D.rows.length, noTtd: !D.ttd };
+}
+/* Persetujuan perbaikan skripsi (mahasiswa uji) */
+function isTesisUji(p) { return /^S[23]$/i.test(p.jenjang || '') && /tesis/i.test(p.jenis || ''); }
+async function buildPerbaikan(D) {
+  var p = D.p, rows = [], k = 0;
+  D.rounds.forEach(function (rd) { if (rd.decision !== 'revisi') return; noteItems(rd.note).forEach(function (it) { rows.push({ NO: (++k) + '.', CAT: it.temuan, HAL: it.halaman }); }); });
+  if (!rows.length) rows.push({ NO: '1.', CAT: 'Seluruh catatan penguji pada ujian telah ditindaklanjuti.', HAL: '' });
+  var first = D.rounds.length ? D.rounds[0].submittedAt : D.nowIso;
+  if (isTesisUji(p)) {
+    var sd = p.siklus === 'sidang';
+    return fillDocx('perbaikan-tesis.docx',
+      { NAMA: p.nama, NPM: p.npm, JUDUL: p.judul, JUDULDOK: sd ? 'LEMBAR TELAAH SIDANG TESIS' : 'LEMBAR TELAAH SEMINAR PROPOSAL', UJIAN: sd ? 'Sidang Tesis' : 'Proposal Tesis', TGLTTD: fmtTglId(D.nowIso), DOSEN: D.signName }, 'NO',
+      rows, 1, D.ttd, { ttd: [4.2, 1.8], paraf: [1, 1] });
+  }
+  var zip = await fillDocx('perbaikan-skripsi.docx',
+    { NAMA: p.nama, NPM: p.npm, JUDUL: p.judul, TGLUJI: D.ujiText || fmtTglId(D.ujiDate || first), TGLTTD: fmtTglId(D.nowIso), DOSEN: D.signName }, 'NO',
+    rows.map(function (r) { r.PARAF = ''; return r; }), 1, D.ttd, { ttd: [3.2, 1.3], paraf: [1, 1] });
+  return zip;
+}
+function fmtTglId(iso) { var d = new Date(iso), M = ['Januari','Februari','Maret','April','Mei','Juni','Juli','Agustus','September','Oktober','November','Desember']; var w = new Date(d.getTime() + 7 * 3600000); return w.getUTCDate() + ' ' + M[w.getUTCMonth()] + ' ' + w.getUTCFullYear(); }
+
 function buildCatatanPdf(D) {
   var J = window.jspdf.jsPDF, doc = new J({ orientation: 'landscape', unit: 'mm', format: 'a4' });
   var W = 297, H = 210, M = 15, m = D.meta, y = M, logo = dataUrl(D.logo), ttd = dataUrl(D.ttd);
@@ -1210,7 +1317,9 @@ async function makeCatatan(milestone, userId) {
 function catatanCard(list, uid) {
   if (!list || !list.length) return '';
   return '<div class="card"><h2>Catatan proses bimbingan</h2><p class="muted">Rekap seluruh catatan pembimbing dalam format PDF (siap dicetak) untuk kelengkapan berkas.</p><div class="row" style="gap:8px;flex-wrap:wrap">' +
-    list.map(function (c) { return '<button class="btn" data-act="catatan" data-ms="' + c.key + '"' + (uid ? ' data-uid="' + uid + '"' : '') + '>⬇ Unduh sampai ' + esc(c.label) + '</button>'; }).join('') + '</div></div>';
+    list.map(function (c) { return '<button class="btn" data-act="catatan" data-ms="' + c.key + '"' + (uid ? ' data-uid="' + uid + '"' : '') + '>⬇ PDF sampai ' + esc(c.label) + '</button>'; }).join('') + '</div>' +
+    '<p class="muted" style="margin-top:14px">Blanko berita acara bimbingan resmi prodi (DOCX), sudah terisi nama, NPM, catatan, paraf, dan tanda tangan pembimbing.</p><div class="row" style="gap:8px;flex-wrap:wrap">' +
+    list.map(function (c) { return '<button class="btn primary" data-act="blanko" data-ms="' + c.key + '"' + (uid ? ' data-uid="' + uid + '"' : '') + '>⬇ Blanko sampai ' + esc(c.label) + '</button>'; }).join('') + '</div></div>';
 }
 function titleSuggestHtml(rd) {
   if (!rd.titleSuggest || !rd.titleSuggest.length) return '';
@@ -1594,8 +1703,18 @@ var ACT = {
     return guard(async function () {
       await ensurePdfLib(); var A = await api('adminAssets'), nowIso = new Date().toISOString(), closing = ($('#ujc-' + id).value || '').trim();
       var stg = d.stages[0], doc = buildRiwayatPdf({ p: p, rounds: stg.rounds, nowIso: nowIso, logo: A.logo, ttd: A.ttd, signName: A.signName, kota: A.kota, closing: closing });
-      var b64 = doc.output('datauristring').split(',')[1];
-      var r = await api('adminUjiDecide', { submissionId: id, decision: 'selesai', closingNote: closing, riwayatPdf: b64 });
+      var b64 = doc.output('datauristring').split(',')[1], docxB64 = null, docxBlob = null;
+      if ((/skripsi/i.test(p.jenis) && p.jenjang === 'S1') || isTesisUji(p)) {
+        var tg = '';
+        if (!isTesisUji(p)) {
+          tg = prompt('Tanggal ujian untuk blanko Persetujuan Perbaikan (contoh: 6 Maret 2026).\nKosongkan bila ingin memakai tanggal pengiriman temuan pertama.', '');
+          if (tg === null) return;
+        }
+        var zip = await buildPerbaikan({ p: p, rounds: stg.rounds, nowIso: nowIso, ttd: A.ttd, signName: A.signName, ujiDate: null, ujiText: (tg || '').trim() });
+        docxB64 = await zipOut(zip, 'base64'); docxBlob = await zipOut(zip, 'blob');
+      }
+      var r = await api('adminUjiDecide', { submissionId: id, decision: 'selesai', closingNote: closing, riwayatPdf: b64, blankoDocx: docxB64 || undefined });
+      if (docxBlob) saveBlobAs(docxBlob, 'Persetujuan-Perbaikan_' + String(p.npm).replace(/\W+/g, '') + '.docx');
       store.del('draft_ujx_' + id); store.del('ujm_' + id); store.del('ujo_' + id);
       doc.save('Riwayat-Revisi_' + String(p.npm).replace(/\W+/g, '') + '.pdf');
       await refreshAfter();
@@ -1679,6 +1798,12 @@ var ACT = {
       var r = await makeCatatan(t.dataset.ms, t.dataset.uid);
       toast(r.noLogo || r.noTtd ? 'PDF diunduh, tetapi ' + (r.noLogo ? 'logo' : '') + (r.noLogo && r.noTtd ? ' dan ' : '') + (r.noTtd ? 'tanda tangan' : '') + ' belum diunggah (menu Pengaturan dokumen).' : 'PDF catatan bimbingan diunduh.', r.noLogo || r.noTtd ? 'err' : '');
     }, 'Menyusun PDF…');
+  },
+  blanko: function (t) {
+    return guard(async function () {
+      var r = await makeBlankoBimbingan(t.dataset.ms, t.dataset.uid);
+      toast(r.noTtd ? 'Blanko diunduh, tetapi tanda tangan belum diunggah (menu Pengaturan dokumen).' : 'Blanko berita acara bimbingan diunduh.', r.noTtd ? 'err' : '');
+    }, 'Menyusun blanko…');
   },
   jurnalOpen: function () { jurnalModal(); },
   jurnalGo: function () {
@@ -1853,7 +1978,7 @@ document.addEventListener('submit', function (e) {
     if (!S.cap) return toast('Soal verifikasi belum termuat. Klik tombol muat ulang.', 'err');
     guard(async function () {
       try {
-        var rg = await api('register', Object.assign({}, fd, { consentAi: !!fd.consentAi, captchaToken: S.cap.token, captchaAnswer: $('#capa').value, mode: S.regMode === 'penguji' ? 'penguji' : 'bimbingan' }), true);
+        var rg = await api('register', Object.assign({}, fd, { consentAi: true, captchaToken: S.cap.token, captchaAnswer: $('#capa').value, mode: S.regMode === 'penguji' ? 'penguji' : 'bimbingan' }), true);
         S.regInfo = { adminWa: rg.adminWa, tok: rg.waTok, text: waRegText(fd) };
       } catch (err) { loadCaptcha(); throw err; }
       S.pendingEmail = fd.email.trim().toLowerCase(); S.view = 'registered'; render();
