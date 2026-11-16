@@ -1230,7 +1230,7 @@ function saveBlobAs(blob, name) { var a = document.createElement('a'); a.href = 
 function plainNote(s) { return String(s || '').replace(/\*\*/g, '').replace(/[ \t]+\n/g, '\n').trim(); }
 /* Berita acara bimbingan: D = hasil api('catatanBimbingan') */
 async function buildBeritaAcara(D) {
-  var m = D.meta, mag = /^S[23]$/i.test(m.jenjang || '');
+  var m = D.meta, mag = /^S[23]$/i.test(m.jenjang || ''); // S2/S3 (termasuk artikel S2) memakai template tesis
   var rows = D.rows.map(function (r, i) { return { NO: String(r.no) + '.', TGL: r.tanggal, CAT: r.head + (r.catatan ? '\n' + plainNote(r.catatan) : ''), PARAF: '1' }; });
   var zip = await fillDocx(mag ? 'berita-acara-magister.docx' : 'berita-acara-s1.docx',
     { NAMA: m.nama, NPM: m.npm, TGLTTD: m.tanggal, DOSEN: m.signName }, 'NO', rows, 5, D.ttd, { ttd: [4.2, 1.5], paraf: [1.2, 0.9] });
