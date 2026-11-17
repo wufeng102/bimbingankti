@@ -1135,7 +1135,7 @@ function adminPanel(s, rd) {
     '<label class="f">Lampirkan berkas dari dosen (opsional, DOCX/PDF)<input class="inp" type="file" id="lec-' + id + '" accept=".docx,.pdf"></label>' +
     (isJudul ? '<label class="f">Judul final jika diterima (opsional)<input class="inp" id="title-' + id + '" maxlength="300" value="' + esc(S.detail.profile.judul) + '"></label>' : '') +
     '<label class="f">Catatan penutup tahap jika diterima (opsional)<input class="inp" id="close-' + id + '" maxlength="500" placeholder="mis. seluruh catatan revisi telah ditindaklanjuti"></label>' +
-    '<label class="f" style="display:flex;gap:8px;align-items:center;color:var(--text)"><input type="checkbox" id="inc-' + id + '" ' + (ai && ai.rekomendasi === 'lanjut' ? 'checked' : '') + '> Sertakan catatan di atas pada email penerimaan</label>' +
+    '<label class="f" style="display:flex;gap:8px;align-items:center;color:var(--text)"><input type="checkbox" id="inc-' + id + '" ' + 'checked' + '> Simpan catatan di atas pada berita acara bimbingan dan email penerimaan (jika tahap diterima)</label>' +
     '<div class="row" style="margin-top:14px"><button class="btn warn sp" data-act="decide" data-dec="revisi" data-id="' + id + '">Kirim sebagai Revisi</button><button class="btn good sp" data-act="decide" data-dec="diterima" data-id="' + id + '">Terima dan lanjut</button></div></div>';
 }
 
@@ -1289,10 +1289,16 @@ async function fillDocx(tplName, V, rowKey, rows, minRows, ttd, sizes) {
 async function zipOut(zip, kind) { return zip.generateAsync({ type: kind, mimeType: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document', compression: 'DEFLATE' }); }
 function saveBlobAs(blob, name) { var a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = name; document.body.appendChild(a); a.click(); setTimeout(function () { URL.revokeObjectURL(a.href); a.remove(); }, 1500); }
 function plainNote(s) { return String(s || '').replace(/\*\*/g, '').replace(/[ \t]+\n/g, '\n').trim(); }
+/* isi surat tanpa salam pembuka dan penutup, agar pas sebagai catatan pada blanko */
+function blankoNote(s) {
+  var t = plainNote(s).replace(/\r/g, ''), k = t.search(/\n\s*Wassalamu/i); if (k >= 0) t = t.slice(0, k);
+  t = t.split('\n').filter(function (l) { return !/^\s*(Assalamu|Yth\.|Kepada Yth)/i.test(l); }).join('\n');
+  return t.replace(/\n{3,}/g, '\n\n').trim();
+}
 /* Berita acara bimbingan: D = hasil api('catatanBimbingan') */
 async function buildBeritaAcara(D) {
   var m = D.meta, mag = /^S[23]$/i.test(m.jenjang || ''); // S2/S3 (termasuk artikel S2) memakai template tesis
-  var rows = D.rows.map(function (r, i) { return { NO: String(r.no) + '.', TGL: r.tanggal, CAT: r.head + (r.catatan ? '\n' + plainNote(r.catatan) : ''), PARAF: '1' }; });
+  var rows = D.rows.map(function (r, i) { return { NO: String(r.no) + '.', TGL: r.tanggal, CAT: r.head + (r.catatan ? '\n' + blankoNote(r.catatan) : ''), PARAF: '1' }; });
   var zip = await fillDocx(mag ? 'berita-acara-magister.docx' : 'berita-acara-s1.docx',
     { NAMA: m.nama, NPM: m.npm, TGLTTD: m.tanggal, DOSEN: m.signName }, 'NO', rows, 5, D.ttd, { ttd: [4.2, 1.5], paraf: [1.2, 0.9] });
   return zip;
@@ -1307,7 +1313,14 @@ async function makeBlankoBimbingan(milestone, userId) {
 function isTesisUji(p) { return /^S[23]$/i.test(p.jenjang || '') && /tesis/i.test(p.jenis || ''); }
 async function buildPerbaikan(D) {
   var p = D.p, rows = [], k = 0;
-  D.rounds.forEach(function (rd) { if (rd.decision !== 'revisi') return; noteItems(rd.note).forEach(function (it) { rows.push({ NO: (++k) + '.', CAT: it.temuan, HAL: it.halaman }); }); });
+  D.rounds.forEach(function (rd) {
+    if (rd.decision !== 'revisi') return;
+    noteItems(rd.note).forEach(function (it) {
+      var cat = it.temuan + (it.penjelasan && it.penjelasan !== '-' ? '\nPenjelasan: ' + it.penjelasan : '') + (it.saran && it.saran !== '-' ? '\nSaran perbaikan: ' + it.saran : '');
+      rows.push({ NO: (++k) + '.', CAT: cat, HAL: it.halaman });
+    });
+    var ex = noteExtra(rd.note); if (ex) rows.push({ NO: (++k) + '.', CAT: ex, HAL: '' });
+  });
   if (!rows.length) rows.push({ NO: '1.', CAT: 'Seluruh catatan penguji pada ujian telah ditindaklanjuti.', HAL: '' });
   var first = D.rounds.length ? D.rounds[0].submittedAt : D.nowIso;
   if (isTesisUji(p)) {
@@ -1697,10 +1710,14 @@ function ujiPanel(s, rd) {
 
 function findRound(id) { var rd = null; ((S.detail && S.detail.stages) || []).forEach(function (s) { s.rounds.forEach(function (r) { if (r.id === id) rd = r; }); }); return rd; }
 function noteItems(note) {
-  var out = [], m, re = /^\s*(\d+)\.\s+\[Halaman ([^\]]*)\]\s+(.+)$/gm;
-  while ((m = re.exec(String(note || '')))) out.push({ halaman: m[2], temuan: m[3] });
+  var out = [], txt = String(note || '').replace(/\r/g, ''), head = txt.split(/\n\s*\n(?=Catatan tambahan dari penguji:)/)[0];
+  head.split(/\n(?=\s*\d+\.\s+\[Halaman )/).forEach(function (blk) {
+    var m = blk.match(/^\s*\d+\.\s+\[Halaman ([^\]]*)\]\s+([\s\S]*?)(?:\n\s*Penjelasan:\s*([\s\S]*?))?(?:\n\s*Saran:\s*([\s\S]*?))?\s*$/);
+    if (m) out.push({ halaman: m[1], temuan: m[2].trim(), penjelasan: (m[3] || '').trim(), saran: (m[4] || '').trim() });
+  });
   return out;
 }
+function noteExtra(note) { var m = String(note || '').match(/Catatan tambahan dari penguji:\s*\n([\s\S]+)$/); return m ? m[1].trim() : ''; }
 
 function buildRiwayatPdf(D) {
   var J = window.jspdf.jsPDF, doc = new J({ orientation: 'portrait', unit: 'mm', format: 'a4' });
