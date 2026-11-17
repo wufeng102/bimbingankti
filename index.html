@@ -402,6 +402,7 @@ header.top::before{content:"";position:absolute;left:0;right:0;bottom:0;height:1
 .foot b{display:block;margin-top:8px;color:var(--text);font-weight:700}
 .foot small{display:block;margin-top:2px}
 @media(max-width:560px){.hero2 .pc{flex-direction:row;gap:14px;align-items:center}.hero2 .pc .ring{width:84px;height:84px}.hero2 .pc .ring b{font-size:1.3rem}}
+textarea.inp.bigta{min-height:380px;line-height:1.6;font-size:1rem}.vside textarea.vbig{min-height:58vh;width:100%}@media(max-width:760px){textarea.inp.bigta{min-height:300px}.vside textarea.vbig{min-height:30vh}}
 </style>
 </head>
 <body>
@@ -1001,6 +1002,13 @@ function adminJalur(L) {
   var extra = (art.n || art.acc) ? '<p class="muted" style="margin:12px 0 0"><small>Artikel jurnal: ' + art.n + ' sedang menulis naskah, ' + art.acc + ' pada tahap ACC siap submit.</small></p>' : '';
   return h + extra;
 }
+function aiAutoPanel() {
+  var on = S.me.config.aiAuto !== false;
+  return '<div class="pn"><div class="row"><h3>Pemeriksaan AI otomatis</h3><small class="sp"></small>' +
+    '<button class="btn sm' + (on ? ' primary' : '') + '" data-act="aiAuto" data-on="1" aria-pressed="' + on + '">Aktif</button> ' +
+    '<button class="btn sm' + (!on ? ' primary' : '') + '" data-act="aiAuto" data-on="0" aria-pressed="' + !on + '">Nonaktif</button></div>' +
+    '<small>' + (on ? 'Setiap unggahan baru diperiksa Claude dalam sekitar 5 menit dan memakai kuota API.' : 'Tidak ada pemeriksaan otomatis. Anda tetap dapat menekan "Periksa sekarang" pada naskah tertentu.') + '</small></div>';
+}
 function adminListView() {
   var ALL = S.list || [], q = S.q.toLowerCase();
   var rejN = ALL.filter(function (u) { return u.approval === 'rejected'; }).length;
@@ -1024,7 +1032,7 @@ function adminListView() {
   }).sort(function (a, b) { return (b.waiting - a.waiting) || String(a.nama).localeCompare(b.nama); });
   var fl = [['all', 'Semua'], ['wait', 'Perlu review'], ['idle', 'Tanpa progres (' + idleN + ')'], ['pend', 'Menunggu persetujuan (' + pendN + ')'], ['uji', 'Diuji (' + ujN + ')'], ['active', 'Berproses'], ['done', 'Selesai']].concat(rejN ? [['rej', 'Ditolak (' + rejN + ')']] : []).map(function (f) { return '<button class="' + (S.flt === f[0] ? 'on' : '') + '" data-act="flt" data-f="' + f[0] + '">' + f[1] + '</button>'; }).join('');
   var h = '<div class="pg"><h1>Dashboard pembimbing</h1><p>' + esc(today()) + '</p><button class="btn sm" data-act="assets">Pengaturan dokumen</button> <button class="btn sm" data-act="jrAdmin">Basis data jurnal</button></div>' +
-    pendPanel(L) + strip([['Seluruh mahasiswa', L.length, '', unv ? unv + ' belum verifikasi email' : 'semua terverifikasi'], ['Berproses', run, 'var(--accent)', 'sedang menyusun'], ['Perlu review', wait.length, wait.length ? 'var(--amber)' : '', 'menunggu catatan Anda'], ['Selesai', done.length, 'var(--green)', 'akun sudah ditutup']]) +
+    aiAutoPanel() + pendPanel(L) + strip([['Seluruh mahasiswa', L.length, '', unv ? unv + ' belum verifikasi email' : 'semua terverifikasi'], ['Berproses', run, 'var(--accent)', 'sedang menyusun'], ['Perlu review', wait.length, wait.length ? 'var(--amber)' : '', 'menunggu catatan Anda'], ['Selesai', done.length, 'var(--green)', 'akun sudah ditutup']]) +
     '<div class="pn"><div class="row"><h3>Status bimbingan</h3><small class="sp"></small><small>' + L.length + ' mahasiswa</small></div>' +
     '<div class="sbar" role="img" aria-label="Selesai ' + done.length + ', perlu review ' + wait.length + ', berproses ' + run + '">' +
     '<i style="width:' + pct(done.length) + '%;background:var(--green)"></i><i style="width:' + pct(wait.length) + '%;background:var(--amber)"></i><i style="width:' + pct(run) + '%;background:var(--accent)"></i></div>' +
@@ -1113,20 +1121,16 @@ function waLink(stage, version) {
 function adminPanel(s, rd) {
   var ai = rd.ai, id = rd.id, st = rd.aiStatus || '';
   var draft = store.get('draft_' + id), text = draft != null ? draft : (ai ? ai.catatan_untuk_mahasiswa : '');
-  var stx = { pending: 'Dalam antrean, diperiksa otomatis (±5 menit)', processing: 'Sedang diperiksa…', done: 'Selesai ' + fmt(rd.aiAt), error: 'Gagal: ' + esc(rd.aiError) }[st] || 'Belum diperiksa';
+  var autoOn = S.me.config.aiAuto !== false;
+  var stx = { pending: autoOn ? 'Dalam antrean, diperiksa otomatis (±5 menit)' : 'Belum diperiksa (pemeriksaan otomatis nonaktif)', processing: 'Sedang diperiksa…', done: 'Selesai ' + fmt(rd.aiAt), error: 'Gagal: ' + esc(rd.aiError) }[st] || 'Belum diperiksa';
   var a = '<div class="ai"><div class="row"><b>Pemeriksaan Claude</b>' + (ai ? '<span class="tag ' + (ai.rekomendasi === 'lanjut' ? 'g' : 'a') + '">' + (ai.rekomendasi === 'lanjut' ? 'Rekomendasi: lanjut' : 'Rekomendasi: revisi') + '</span>' : '') + '<small class="sp"></small></div>' +
     '<small>' + stx + '</small>' + (ai ? '<p class="sum">' + esc(ai.ringkasan) + '</p>' + aiExtraHtml(ai) : '') +
     '<div class="row" style="margin-top:10px">' + (rd.hasAiPdf ? '<button class="btn sm" data-act="dl" data-kind="ai" data-id="' + id + '">Lihat PDF hasil</button>' : '') +
     '<button class="btn sm" data-act="ai" data-id="' + id + '">' + (st === 'done' ? 'Periksa ulang' : st === 'error' ? 'Coba lagi' : 'Periksa sekarang') + '</button></div></div>';
   var isJudul = s.key === 'judul';
   return '<div style="margin-top:6px">' + a +
-    '<div class="ai"><div class="row"><b>Catatan manual dosen</b><small class="sp"></small><button class="btn sm" data-act="view" data-id="' + id + '" data-name="' + esc(rd.fileName) + '">Baca naskah dan catat</button></div>' +
-    '<small>Temuan Anda sendiri yang tidak tertangkap pemeriksaan otomatis. Dapat juga dicatat saat membaca naskah.</small>' + mnListHtml(id) +
-    '<div class="grid2"><label class="f">Bagian / lokasi<input class="inp" id="mnl-' + id + '" maxlength="120" placeholder="mis. 1.2 paragraf 3"></label>' +
-    '<label class="f">Temuan dan arahan<input class="inp" id="mnt-' + id + '" maxlength="1000" placeholder="masalah, alasan, cara memperbaiki"></label></div>' +
-    '<div class="row" style="margin-top:10px"><button class="btn sm" data-act="mnAdd" data-id="' + id + '">+ Tambah catatan</button>' +
-    '<button class="btn sm primary" data-act="mnInsert" data-id="' + id + '">Sisipkan ke surat</button></div></div>' +
-    '<label class="f">Surat catatan untuk mahasiswa (dapat diedit bebas sebelum dikirim)<textarea class="inp" id="note-' + id + '" data-draft="' + id + '" placeholder="Tulis catatan revisi sendiri, atau muat draf Claude lalu sesuaikan…">' + esc(text) + '</textarea></label>' +
+    '<div class="row" style="margin-top:10px"><b>Catatan untuk mahasiswa</b><small class="sp"></small><button class="btn sm" data-act="view" data-id="' + id + '" data-name="' + esc(rd.fileName) + '">Baca naskah sambil mencatat</button></div>' +
+    '<label class="f" style="margin-top:6px">Isi surat (tulis sebebas dan sepanjang yang Anda perlukan; inilah yang dikirim ke mahasiswa)<textarea class="inp bigta" id="note-' + id + '" data-draft="' + id + '" placeholder="Tulis catatan revisi sendiri, atau muat draf Claude lalu sesuaikan…">' + esc(text) + '</textarea></label>' +
     (ai ? '<div class="row" style="margin-top:6px"><button class="btn sm" data-act="loadAi" data-id="' + id + '">Muat ulang draf Claude</button><button class="btn sm" data-act="clearNote" data-id="' + id + '">Kosongkan, tulis sendiri</button></div>' : '') +
     '<label class="f">Lampirkan berkas dari dosen (opsional, DOCX/PDF)<input class="inp" type="file" id="lec-' + id + '" accept=".docx,.pdf"></label>' +
     (isJudul ? '<label class="f">Judul final jika diterima (opsional)<input class="inp" id="title-' + id + '" maxlength="300" value="' + esc(S.detail.profile.judul) + '"></label>' : '') +
@@ -1136,17 +1140,6 @@ function adminPanel(s, rd) {
 }
 
 /* ------------------------------ Catatan manual & penampil DOCX ------------------------------ */
-function mnGet(id) { try { return JSON.parse(store.get('mn_' + id) || '[]'); } catch (e) { return []; } }
-function mnSet(id, a) { store.set('mn_' + id, JSON.stringify(a)); }
-function mnListHtml(id) {
-  return mnGet(id).map(function (n, i) {
-    return '<div class="mn"><div class="tx">' + (n.loc ? '<b>' + esc(n.loc) + '</b>: ' : '') + esc(n.text) + '</div><button data-act="mnDel" data-id="' + id + '" data-i="' + i + '" aria-label="Hapus">✕</button></div>';
-  }).join('');
-}
-function mnAddNote(id, loc, text) {
-  text = String(text || '').trim(); if (!text) return false;
-  var a = mnGet(id); a.push({ loc: String(loc || '').trim(), text: text }); mnSet(id, a); return true;
-}
 function loadScript(src) {
   return new Promise(function (res, rej) {
     var s = document.createElement('script'); s.src = src; s.onload = res;
@@ -1174,11 +1167,10 @@ function vwApplyZoom() {
 }
 function vwSide() {
   var el = $('#vside'); if (!el) return;
-  el.innerHTML = '<b>Catatan manual</b><p class="muted" style="margin:4px 0 0;font-size:.85rem">Catat temuan sambil membaca. Tersimpan otomatis, lalu disisipkan ke surat dari panel keputusan.</p>' +
-    mnListHtml(VW.id).replace(/data-act="mnDel"/g, 'data-act="mnDel" data-v="1"') +
-    '<label class="f">Bagian / lokasi<input class="inp" id="vl" maxlength="120" placeholder="mis. 2.1 paragraf 2"></label>' +
-    '<label class="f">Temuan dan arahan<textarea class="inp" id="vt2" maxlength="1000" style="min-height:90px" placeholder="masalah, alasan, cara memperbaiki"></textarea></label>' +
-    '<button class="btn primary block" style="margin-top:10px" data-act="vwAdd">+ Tambah catatan</button>';
+  var n = $('#note-' + VW.id), cur = store.get('draft_' + VW.id);
+  if (cur == null) cur = n ? n.value : '';
+  el.innerHTML = '<b>Catatan untuk mahasiswa</b><p class="muted" style="margin:4px 0 8px;font-size:.85rem">Tulis bebas dan panjang sambil membaca. Tersimpan otomatis dan langsung menjadi isi surat.</p>' +
+    '<textarea class="inp bigta vbig" id="vnote" data-draft="' + VW.id + '" placeholder="Tulis catatan Anda di sini…">' + esc(cur) + '</textarea>';
 }
 async function openViewer(id, name) {
   VW = { id: id, zoom: 1, fit: true };
@@ -1199,7 +1191,7 @@ async function openViewer(id, name) {
     var b = $('#vdoc'); if (b) b.innerHTML = '<div class="vmsg">Naskah tidak dapat ditampilkan: ' + esc(e.message || 'kesalahan') + '<br>Gunakan tombol Unduh untuk membukanya di Word.</div>';
   }
 }
-function closeViewer() { RD.token++; if (RD.io) { RD.io.disconnect(); RD.io = null; } if (RD.pdf) { try { RD.pdf.destroy(); } catch (e) {} RD.pdf = null; } RD.kind = ''; $('#viewer').hidden = true; $('#viewer').innerHTML = ''; document.body.style.overflow = ''; if (S.view === 'adminDetail') render(); }
+function closeViewer() { try { if (VW && VW.id) { var vn = $('#vnote'), ln = $('#note-' + VW.id); if (vn && ln) ln.value = vn.value; } } catch (e) {} RD.token++; if (RD.io) { RD.io.disconnect(); RD.io = null; } if (RD.pdf) { try { RD.pdf.destroy(); } catch (e) {} RD.pdf = null; } RD.kind = ''; $('#viewer').hidden = true; $('#viewer').innerHTML = ''; document.body.style.overflow = ''; if (S.view === 'adminDetail') render(); }
 window.addEventListener('resize', function () { if (!$('#viewer').hidden && VW.fit) vwApplyZoom(); });
 document.addEventListener('keydown', function (e) { if (e.key !== 'Escape') return; if (!$('#modal').hidden) closeModal(); else if (!$('#viewer').hidden) closeViewer(); });
 
@@ -1664,7 +1656,8 @@ function ujMnSet(id, a) { store.set('ujm_' + id, JSON.stringify(a)); }
 function ujOff(id) { try { return JSON.parse(store.get('ujo_' + id) || '[]'); } catch (e) { return []; } }
 function ujiPanel(s, rd) {
   var ai = rd.ai, id = rd.id, st = rd.aiStatus || '', off = ujOff(id), mn = ujMnGet(id);
-  var stx = { pending: 'Dalam antrean, diperiksa otomatis (±5 menit)', processing: 'Sedang diperiksa…', done: 'Selesai ' + fmt(rd.aiAt), error: 'Gagal: ' + esc(rd.aiError) }[st] || 'Belum diperiksa';
+  var autoOn = S.me.config.aiAuto !== false;
+  var stx = { pending: autoOn ? 'Dalam antrean, diperiksa otomatis (±5 menit)' : 'Belum diperiksa (pemeriksaan otomatis nonaktif)', processing: 'Sedang diperiksa…', done: 'Selesai ' + fmt(rd.aiAt), error: 'Gagal: ' + esc(rd.aiError) }[st] || 'Belum diperiksa';
   var isRev = rd.version > 1;
   var h = '<div style="margin-top:6px"><div class="ai"><div class="row"><b>' + (isRev ? 'Pemeriksaan revisi oleh Claude' : 'Bahan pengujian dari Claude') + '</b>' +
     (ai ? '<span class="tag ' + (ai.rekomendasi === 'lanjut' ? 'g' : 'a') + '">' + (ai.rekomendasi === 'lanjut' ? 'Rekomendasi: dapat dinyatakan selesai' : 'Rekomendasi: revisi') + '</span>' : '') + '<small class="sp"></small></div><small>' + stx + '</small>';
@@ -1848,27 +1841,6 @@ var ACT = {
   vwClose: function () { closeViewer(); },
   vwZ: function (t) { VW.fit = false; VW.zoom = Math.min(2, Math.max(.3, VW.zoom + (+t.dataset.d) * .1)); vwApplyZoom(); },
   vwFit: function () { VW.fit = true; vwApplyZoom(); },
-  vwAdd: function () {
-    if (!mnAddNote(VW.id, $('#vl').value, $('#vt2').value)) return toast('Tulis temuan terlebih dahulu.', 'err');
-    vwSide(); toast('Catatan ditambahkan.');
-  },
-  mnAdd: function (t) {
-    var id = t.dataset.id;
-    if (!mnAddNote(id, $('#mnl-' + id).value, $('#mnt-' + id).value)) return toast('Tulis temuan terlebih dahulu.', 'err');
-    var cur = $('#note-' + id).value; store.set('draft_' + id, cur); render();
-  },
-  mnDel: function (t) {
-    var id = t.dataset.id, a = mnGet(id); a.splice(+t.dataset.i, 1); mnSet(id, a);
-    if (t.dataset.v) vwSide(); else { store.set('draft_' + id, $('#note-' + id).value); render(); }
-  },
-  mnInsert: function (t) {
-    var id = t.dataset.id, a = mnGet(id), ta = $('#note-' + id);
-    if (!a.length) return toast('Belum ada catatan manual untuk disisipkan.', 'err');
-    var block = 'Catatan tambahan dari pembimbing:\n' + a.map(function (n, i) { return (i + 1) + '. ' + (n.loc ? n.loc + ': ' : '') + n.text; }).join('\n');
-    var cur = ta.value.replace(/\s+$/, ''), k = cur.lastIndexOf('Wassalamualaikum');
-    var out = k > 0 ? cur.slice(0, k).replace(/\s+$/, '') + '\n\n' + block + '\n\n' + cur.slice(k) : (cur ? cur + '\n\n' : '') + block;
-    store.set('draft_' + id, out); mnSet(id, []); render(); toast('Catatan manual disisipkan ke surat.');
-  },
   loadAi: function (t) {
     var id = t.dataset.id, ta = $('#note-' + id), rd = null;
     S.detail.stages.forEach(function (s) { s.rounds.forEach(function (r) { if (r.id === id) rd = r; }); });
@@ -1949,6 +1921,10 @@ var ACT = {
       JRDATA = null; jurnalAdminModal(await api('adminJurnalStatus')); toast('Basis data jurnal diperbarui: ' + sent + ' jurnal.');
     }, 'Mengimpor…');
   },
+  aiAuto: function (t) {
+    var on = t.dataset.on === '1';
+    return guard(async function () { await api('adminSetAiAuto', { on: on }); S.me.config.aiAuto = on; render(); toast(on ? 'Pemeriksaan otomatis diaktifkan.' : 'Pemeriksaan otomatis dinonaktifkan.'); }, 'Menyimpan…');
+  },
   assets: function () { return guard(async function () { assetModal(await api('adminAssetStatus')); }, 'Memuat…'); },
   remind: function (t) { remindModal(t.dataset.id); },
   remindSend: function (t) {
@@ -1992,8 +1968,6 @@ var ACT = {
   },
   decide: function (t) {
     var id = t.dataset.id, dec = t.dataset.dec, note = $('#note-' + id).value.trim(), nm = S.detail.profile.nama;
-    if (dec === 'revisi' && note.length < 10 && !mnGet(id).length) return toast('Tulis catatan revisi terlebih dahulu.', 'err');
-    if (mnGet(id).length) { toast('Ada catatan manual yang belum disisipkan ke surat. Klik "Sisipkan ke surat" dahulu.', 'err'); return; }
     if (dec === 'revisi' && note.length < 10) return toast('Tulis catatan revisi terlebih dahulu.', 'err');
     if (!confirm(dec === 'revisi' ? 'Kirim catatan revisi ke ' + nm + '? Email akan terkirim otomatis.' : 'Terima tahap ini dan buka tahap berikutnya untuk ' + nm + '? Email akan terkirim otomatis.')) return;
     return guard(async function () {
@@ -2119,7 +2093,7 @@ document.addEventListener('submit', function (e) {
 setInterval(function () {
   if (S.view !== 'adminDetail' || !S.detail || document.hidden) return;
   var a = document.activeElement; if (a && /^(TEXTAREA|INPUT)$/.test(a.tagName)) return;
-  var pend = S.detail.stages.some(function (s) { return s.rounds.some(function (r) { return r.aiStatus === 'pending' || r.aiStatus === 'processing'; }); });
+  var pend = S.detail.stages.some(function (s) { return s.rounds.some(function (r) { return (r.aiStatus === 'pending' && (!S.me || !S.me.config || S.me.config.aiAuto !== false)) || r.aiStatus === 'processing'; }); });
   if (!pend) return;
   loadDetail(S.detail.id).then(function () { if (S.view === 'adminDetail') render(); }).catch(function () {});
 }, 25000);
